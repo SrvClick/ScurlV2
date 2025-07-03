@@ -58,7 +58,6 @@ class Scurl
     public function head(): Scurl { return $this->method('HEAD'); }
     public function options_method(): Scurl { return $this->method('OPTIONS'); }
 
-
     public function options(array $options): Scurl
     {
         $this->request->setOptions($options);
