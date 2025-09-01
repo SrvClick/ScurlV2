@@ -1,0 +1,17 @@
+{
+    "name": "srvclick/scurlv2",
+    "description": "Easy Curl PHP v2",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Srvclick\\Scurlv2\\": "srvclick/scurlv2/src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "SrvClick",
+            "email": "admin@srvclick.com"
+        }
+    ],
+    "require": {}
+}
