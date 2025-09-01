@@ -1,10 +1,18 @@
 {
     "name": "srvclick/scurlv2",
     "description": "Easy Curl PHP v2",
+    "license": "MIT",
     "type": "library",
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "campo/random-user-agent": "^1.3",
+        "ramsey/uuid": "^4.7.6"
+    },
     "autoload": {
         "psr-4": {
-            "Srvclick\\Scurlv2\\": "srvclick/scurlv2/src/"
+            "Srvclick\\Scurlv2\\": "src/Srvclick/Scurlv2/"
         }
     },
     "authors": [
@@ -12,6 +20,5 @@
             "name": "SrvClick",
             "email": "admin@srvclick.com"
         }
-    ],
-    "require": {}
+    ]
 }
