@@ -7,6 +7,7 @@ namespace SrvClick\Scurlv2;
 
 use CURLFile;
 use Exception;
+use InvalidArgumentException;
 
 class Scurl
 {
@@ -24,6 +25,61 @@ class Scurl
     {
         return $this->url($url);
     }
+
+    public function proxy(string|array $proxy): static
+    {
+        if (is_string($proxy)) {
+            $parsed = parse_url($proxy);
+
+            if (!isset($parsed['host'], $parsed['port'])) {
+                throw new InvalidArgumentException("Proxy string must contain host and port.");
+            }
+
+            $this->request->setOptions([
+                CURLOPT_PROXY => $parsed['host'],
+                CURLOPT_PROXYPORT => $parsed['port'],
+            ]);
+
+            if (isset($parsed['user'], $parsed['pass'])) {
+                $this->request->setOptions([
+                    CURLOPT_PROXYUSERPWD => "{$parsed['user']}:{$parsed['pass']}",
+                ]);
+            }
+
+        } elseif (is_array($proxy)) {
+            $scheme = $proxy[0] ?? 'http://';
+            $port   = $proxy[1] ?? null;
+            $user   = $proxy[2] ?? null;
+            $pass   = $proxy[3] ?? null;
+
+            if (!$port) {
+                throw new InvalidArgumentException("Proxy port is required in array format.");
+            }
+
+            $url = parse_url($scheme);
+            if (!isset($url['host'])) {
+                throw new InvalidArgumentException("Proxy host must be included in the first element.");
+            }
+
+            $this->request->setOptions([
+                CURLOPT_PROXY => $url['host'],
+                CURLOPT_PROXYPORT => $port,
+            ]);
+
+            if ($user !== null && $pass !== null) {
+                $this->request->setOptions([
+                    CURLOPT_PROXYUSERPWD => "{$user}:{$pass}",
+                ]);
+            }
+
+        } else {
+            throw new InvalidArgumentException("Invalid proxy format.");
+        }
+
+        return $this;
+    }
+
+
 
     public function cookie() : Scurl
     {
