@@ -12,7 +12,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Srvclick\\Scurlv2\\": "src/Srvclick/Scurlv2/"
+            "SrvClick\\Scurlv2\\": "src/SrvClick/Scurlv2/"
         }
     },
     "authors": [
