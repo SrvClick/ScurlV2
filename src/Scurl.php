@@ -26,6 +26,25 @@ class Scurl
         return $this->url($url);
     }
 
+    public function deleteCookie(string $name, ?string $domain = null) : Scurl
+    {
+        $this->request->deleteCookie($name, $domain);
+        return $this;
+    }
+
+    public function deleteCookieCompletely(string $name) : Scurl
+    {
+        $this->request->deleteCookieCompletely($name);
+        return $this;
+    }
+
+
+    public function replaceCookie(string $name, string $value, string $domain,string $path = "/", bool $secure = false, int $expires = 0) : Scurl {
+        $this->request->replaceCookie($name,$value, $domain, $path, $secure,  $expires);
+        return $this;
+    }
+
+
     public function proxy(string|array $proxy): static
     {
         if (is_string($proxy)) {

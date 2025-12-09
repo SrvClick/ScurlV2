@@ -43,6 +43,91 @@ class Request
         return $this->url;
     }
 
+
+    public function replaceCookie( string $name, string $value, string $domain, string $path = "/", bool $secure = false, int $expires = 0): self {
+
+        $this->deleteCookieCompletely($name);
+        if (!$this->cookieFile || !file_exists($this->cookieFile)) {
+            $this->lastCookieResult = false;
+            return $this;
+        }
+        $line = implode("\t", [
+            $domain,
+            'TRUE',
+            $path,
+            $secure ? 'TRUE' : 'FALSE',
+            $expires,
+            $name,
+            $value
+        ]);
+
+        $this->lastCookieResult = file_put_contents($this->cookieFile, PHP_EOL . $line, FILE_APPEND) !== false;
+        return $this;
+    }
+
+    public function deleteCookie(string $name, string $domain = null): self
+    {
+        if (!$this->cookieFile || !file_exists($this->cookieFile)) {
+            $this->lastCookieResult = false;
+            return $this;
+        }
+        $lines = file($this->cookieFile, FILE_IGNORE_NEW_LINES);
+        $newLines = [];
+
+        foreach ($lines as $line) {
+            if (str_starts_with($line, '#') || trim($line) === '') {
+                $newLines[] = $line;
+                continue;
+            }
+
+            $columns = preg_split('/\s+/', $line);
+            if (count($columns) < 7) {
+                $newLines[] = $line;
+                continue;
+            }
+
+            [$dom, $sub, $path, $secure, $expires, $cookieName, $cookieValue] = $columns;
+
+            if ($cookieName === $name && ($domain === null || $domain === $dom)) {
+                continue;
+            }
+
+            $newLines[] = $line;
+        }
+
+        $this->lastCookieResult = file_put_contents($this->cookieFile, implode(PHP_EOL, $newLines)) !== false;
+
+        return $this;
+    }
+
+    public function deleteCookieCompletely(string $name): self
+    {
+        if (!$this->cookieFile || !file_exists($this->cookieFile)) {
+            $this->lastCookieResult = false;
+            return $this;
+        }
+
+        $lines = file($this->cookieFile, FILE_IGNORE_NEW_LINES);
+        $newLines = [];
+
+        foreach ($lines as $line) {
+            $cols = preg_split('/\s+/', trim(ltrim($line, '#')));
+            if (count($cols) < 7) {
+                $newLines[] = $line;
+                continue;
+            }
+            $cookieName = $cols[5];
+            if ($cookieName === $name) {
+                continue;
+            }
+            $newLines[] = $line;
+        }
+        $this->lastCookieResult = file_put_contents($this->cookieFile, implode(PHP_EOL, $newLines)) !== false;
+        return $this;
+    }
+
+
+
     public function enableCookies(?string $file = null): self
     {
         $this->cookieFile = $file ?? tempnam(sys_get_temp_dir(), 'scurl_cookie_');
