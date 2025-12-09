@@ -13,9 +13,53 @@ class Response
         'exceptions' => false,
     ];
 
+    protected array $responseHeaders = [];
+
     public function setConfig(array $config): void
     {
         $this->config = array_replace($this->config, $config);
+    }
+
+    public function setResponseHeaders(array $headers): void
+    {
+        $this->responseHeaders = $headers;
+    }
+    public function getResponseHeaders() : array
+    {
+        return $this->responseHeaders;
+    }
+
+    public function getHeader(string $name, $default = null)
+    {
+        $name = strtolower($name);
+        if (!isset($this->responseHeaders)) {
+            return $default;
+        }
+        return $this->responseHeaders[$name] ?? $default;
+    }
+
+    public function getCookie(string $cookieName, $default = null)
+    {
+        if (
+            !isset($this->responseHeaders['set-cookie']) ||
+            !is_array($this->responseHeaders['set-cookie'])
+        ) {
+            return $default;
+        }
+        foreach ($this->responseHeaders['set-cookie'] as $cookieLine) {
+            $parts = explode(';', $cookieLine);
+            if (count($parts) > 0) {
+                $nv = explode('=', trim($parts[0]), 2);
+                if (count($nv) === 2) {
+                    list($name, $value) = $nv;
+
+                    if (trim($name) === $cookieName) {
+                        return trim($value);
+                    }
+                }
+            }
+        }
+        return $default;
     }
 
     public function setBody(string $body): void

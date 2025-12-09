@@ -13,6 +13,8 @@ class Request
     private ?string $cookieFile = null;
     protected ?CURLFile $uploadFile = null;
 
+    protected ?array $responseHeaders = [];
+
     protected Response $response;
     protected array|string $parameters = [];
     protected array $config = [
@@ -225,18 +227,70 @@ class Request
                 $this->options[CURLOPT_CUSTOMREQUEST]
             );
         }
-        if ($this->cookieFile !== null) {
-            $this->setOptions ( [CURLOPT_COOKIEJAR => $this->cookieFile] );
-            $this->setOptions ( [CURLOPT_COOKIEFILE => $this->cookieFile] );
+
+
+        if (isset($this->options[CURLOPT_HEADER]) && $this->options[CURLOPT_HEADER] === true) {
+
+            // Reiniciar headers para esta request
+            $this->responseHeaders = [];
+
+            $this->setOptions([
+                CURLOPT_HEADERFUNCTION => function ($curl, $header) {
+
+                    $len = strlen($header);
+                    $header = trim($header);
+
+                    if ($header === '') {
+                        return $len;
+                    }
+
+                    if (strpos($header, ':') !== false) {
+                        list($key, $value) = explode(':', $header, 2);
+                        $key = strtolower(trim($key));  // Estandarizar keys
+                        $value = trim($value);
+
+                        // Manejo especial para múltiples Set-Cookie
+                        if ($key === 'set-cookie') {
+                            if (!isset($this->responseHeaders['set-cookie'])) {
+                                $this->responseHeaders['set-cookie'] = [];
+                            }
+                            $this->responseHeaders['set-cookie'][] = $value;
+                        } else {
+                            $this->responseHeaders[$key] = $value;
+                        }
+
+                    } else {
+                        // Headers tipo: HTTP/2 200 OK
+                        $this->responseHeaders[] = $header;
+                    }
+
+                    return $len;
+                }
+
+            ]);
         }
+
+
+
+
+
+        if ($this->cookieFile !== null) {
+            $this->setOptions([CURLOPT_COOKIEJAR => $this->cookieFile]);
+            $this->setOptions([CURLOPT_COOKIEFILE => $this->cookieFile]);
+        }
+
         curl_setopt_array($ch, $this->options);
-        $body = curl_exec($ch);
+        $body   = curl_exec($ch);
+        $error  = curl_error($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         $this->response->setBody($body);
         $this->response->setStatusCode($status);
-        $error = curl_error($ch);
-        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if (isset($this->options[CURLOPT_HEADER]) && $this->options[CURLOPT_HEADER] === true) {
+            $this->response->setResponseHeaders($this->responseHeaders);
+        }
+
         if (
             $this->config['exceptions'] &&
             !$this->isStatusAccepted($status)
