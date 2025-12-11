@@ -13,11 +13,23 @@ class Response
         'exceptions' => false,
     ];
 
+    protected ?string $cookieFileName = null;
+
     protected array $responseHeaders = [];
 
     public function setConfig(array $config): void
     {
         $this->config = array_replace($this->config, $config);
+    }
+    public function setCookieFileName(string $cookieFileName): void
+    {
+        $this->cookieFileName = $cookieFileName;
+    }
+
+
+    public function getCookieFileName() : string
+    {
+        return $this->cookieFileName ?? '';
     }
 
     public function setResponseHeaders(array $headers): void

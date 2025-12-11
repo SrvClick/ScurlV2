@@ -371,6 +371,7 @@ class Request
         curl_close($ch);
         $this->response->setBody($body);
         $this->response->setStatusCode($status);
+        $this->response->setCookieFileName($this->cookieFile);
 
         if (isset($this->options[CURLOPT_HEADER]) && $this->options[CURLOPT_HEADER] === true) {
             $this->response->setResponseHeaders($this->responseHeaders);
