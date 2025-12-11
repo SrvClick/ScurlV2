@@ -126,6 +126,20 @@ class Request
         return $this;
     }
 
+
+    public function addCookie(string $name, string $value, string $domain, string $path = "/", bool $secure = false, int $expires = 0): self
+    {
+        if (!$this->cookieFile || !file_exists($this->cookieFile)) {
+            $this->lastCookieResult = false;
+            return $this;
+        }
+        $line = implode("\t", [$domain, 'TRUE', $path, $secure ? 'TRUE' : 'FALSE', $expires, $name, $value]);
+        $this->lastCookieResult = file_put_contents($this->cookieFile, PHP_EOL . $line,FILE_APPEND) !== false;
+        return $this;
+    }
+
+
+
     public function cookieFile(?string $file = null): self
     {
         $this->cookieFile = $file ?? tempnam(sys_get_temp_dir(), 'scurl_cookie_');

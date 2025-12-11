@@ -44,6 +44,13 @@ class Scurl
         return $this;
     }
 
+    public function addCookie(string $name, string $value, string $domain, string $path = "/", bool $secure = false, int $expires = 0): Scurl
+    {
+        $this->request->addCookie($name, $value, $domain, $path, $secure, $expires);
+        return $this;
+    }
+
+
 
     public function proxy(string|array $proxy): static
     {
