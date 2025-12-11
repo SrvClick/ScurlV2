@@ -98,6 +98,13 @@ class Scurl
         return $this;
     }
 
+    public function cookieFile(?string $file = null): self
+    {
+
+        $this->request->cookieFile($file);
+        return $this;
+    }
+
 
 
     public function cookie() : Scurl
