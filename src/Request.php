@@ -126,7 +126,11 @@ class Request
         return $this;
     }
 
-
+    public function cookieFile(?string $file = null): self
+    {
+        $this->cookieFile = $file ?? tempnam(sys_get_temp_dir(), 'scurl_cookie_');
+        return $this;
+    }
 
     public function enableCookies(?string $file = null): self
     {
