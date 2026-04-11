@@ -208,6 +208,10 @@ class Scurl
     {
         return $this->request->getUploadFile();
     }
+    public function getResponseHeaders(): array
+    {
+        return $this->request->getResponseHeaders();
+    }
 
 
     /**
