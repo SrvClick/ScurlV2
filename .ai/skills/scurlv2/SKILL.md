@@ -3,8 +3,6 @@ name: Scurl v2
 description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
 ---
 
-# Scurl v2
-
 ## What is Scurl?
 
 **Scurl** is a modern PHP 8.0+ HTTP client built on top of cURL, with a fluent (chainable) API. It wraps three classes:
