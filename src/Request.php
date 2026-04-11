@@ -213,18 +213,31 @@ class Request
                 $current[strtolower(trim($key))] = [trim($key), trim($value)];
             }
         }
+
+        $hasUserAgent = false;
         foreach ($headers as $key => $value) {
             if (is_int($key) && str_contains($value, ':')) {
                 [$k, $v] = explode(':', $value, 2);
                 $current[strtolower(trim($k))] = [trim($k), trim($v)];
+                if (strtolower(trim($k)) === 'user-agent') $hasUserAgent = true;
             } else {
                 $current[strtolower(trim($key))] = [trim($key), trim($value)];
+                if (strtolower(trim($key)) === 'user-agent') $hasUserAgent = true;
             }
         }
-        $this->options[CURLOPT_HTTPHEADER] = array_map(
-            fn($entry) => "{$entry[0]}: {$entry[1]}",
-            array_values($current)
-        );
+
+        if ($hasUserAgent && isset($current['user-agent'])) {
+            unset($this->options[CURLOPT_HTTPHEADER]);
+            $this->options[CURLOPT_HTTPHEADER] = array_map(
+                fn($entry) => "{$entry[0]}: {$entry[1]}",
+                $current
+            );
+        } else {
+            $this->options[CURLOPT_HTTPHEADER] = array_map(
+                fn($entry) => "{$entry[0]}: {$entry[1]}",
+                array_values($current)
+            );
+        }
     }
 
     public function getHeader(string $key): ?string
