@@ -73,22 +73,20 @@ class Scurl
             }
 
         } elseif (is_array($proxy)) {
-            $scheme = $proxy[0] ?? 'http://';
-            $port   = $proxy[1] ?? null;
-            $user   = $proxy[2] ?? null;
-            $pass   = $proxy[3] ?? null;
+            $host = $proxy[0] ?? null;
+            $port = $proxy[1] ?? null;
+            $user = $proxy[2] ?? null;
+            $pass = $proxy[3] ?? null;
 
+            if (!$host) {
+                throw new InvalidArgumentException("Proxy host is required in array format.");
+            }
             if (!$port) {
                 throw new InvalidArgumentException("Proxy port is required in array format.");
             }
 
-            $url = parse_url($scheme);
-            if (!isset($url['host'])) {
-                throw new InvalidArgumentException("Proxy host must be included in the first element.");
-            }
-
             $this->request->setOptions([
-                CURLOPT_PROXY => $url['host'],
+                CURLOPT_PROXY => $host,
                 CURLOPT_PROXYPORT => $port,
             ]);
 
@@ -143,7 +141,7 @@ class Scurl
     public function post(): Scurl { return $this->method("POST"); }
     public function put(): Scurl { return $this->method("PUT"); }
     public function delete(): Scurl { return $this->method("DELETE"); }
-    public function patch(): Scurl { return $this->method('PUT'); }
+    public function patch(): Scurl { return $this->method('PATCH'); }
     public function head(): Scurl { return $this->method('HEAD'); }
     public function options_method(): Scurl { return $this->method('OPTIONS'); }
 

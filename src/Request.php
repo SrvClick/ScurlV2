@@ -28,11 +28,12 @@ class Request
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_HTTPHEADER => [
-            'User-Agent: SrvClick Scurl/2.0',
+            'user-agent: SrvClick Scurl/2.0',
         ],
     ];
 
     protected array $acceptedStatusGroups = [200];
+    protected ?bool $lastCookieResult = null;
 
     public function setUrl(string $url): void
     {
@@ -209,21 +210,20 @@ class Request
         foreach ($this->options[CURLOPT_HTTPHEADER] ?? [] as $header) {
             if (str_contains($header, ':')) {
                 [$key, $value] = explode(':', $header, 2);
-                $current[trim($key)] = trim($value);
+                $current[strtolower(trim($key))] = [trim($key), trim($value)];
             }
         }
         foreach ($headers as $key => $value) {
             if (is_int($key) && str_contains($value, ':')) {
                 [$k, $v] = explode(':', $value, 2);
-                $current[trim($k)] = trim($v);
+                $current[strtolower(trim($k))] = [trim($k), trim($v)];
             } else {
-                $current[trim($key)] = trim($value);
+                $current[strtolower(trim($key))] = [trim($key), trim($value)];
             }
         }
         $this->options[CURLOPT_HTTPHEADER] = array_map(
-            fn($k, $v) => "$k: $v",
-            array_keys($current),
-            $current
+            fn($entry) => "{$entry[0]}: {$entry[1]}",
+            array_values($current)
         );
     }
 

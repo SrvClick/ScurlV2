@@ -11,6 +11,58 @@ Esto te permite escribir código más limpio y eficiente:
 
 ---
 
+## ⚙️ Opciones de cURL (avanzado)
+
+Scurl viene con opciones por defecto que puedes personalizar:
+
+```php
+$curl->options([
+    CURLOPT_RETURNTRANSFER => true,   // Retornar string en vez de output
+    CURLOPT_FOLLOWLOCATION => true,   // Seguir redirects
+    CURLOPT_TIMEOUT => 30,           // Timeout en segundos
+    CURLOPT_SSL_VERIFYPEER => false,  // Verificar SSL
+    CURLOPT_SSL_VERIFYHOST => false,  // Verificar host SSL
+    CURLOPT_COOKIEJAR => '/tmp/cookies.txt', // Guardar cookies
+    CURLOPT_COOKIEFILE => '/tmp/cookies.txt', // Leer cookies
+    CURLOPT_ENCODING => '',           // Accept-Encoding: gzip, deflate
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_MAXREDIRS => 5,          // Max redirects
+    CURLOPT_CONNECTTIMEOUT => 10,   // Timeout de conexión
+    // ... cualquier otra opción de cURL
+]);
+```
+
+O establecer una opción individual:
+
+```php
+$curl->options([CURLOPT_TIMEOUT => 60]);
+```
+
+Ver todas las opciones: https://www.php.net/manual/es/function.curl-setopt.php
+
+---
+
+## 🌐 Configurar Proxy
+
+```php
+// Formato string (recomendado)
+$curl->proxy('http://proxy.example.com:8080');
+$curl->proxy('http://user:pass@proxy.example.com:8080'); // Con autenticación
+$curl->proxy('socks5://proxy.example.com:1080');    // SOCKS5
+
+// Formato array
+$curl->proxy(['http://', 'proxy.example.com', 'user', 'pass']);
+
+// O directamente con opciones cURL
+$curl->options([
+    CURLOPT_PROXY => 'proxy.example.com:8080',
+    CURLOPT_PROXYUSERPWD => 'user:pass',
+    CURLOPT_PROXYTYPE => CURLPROXY_HTTP,
+]);
+```
+
+---
+
 ## 📦 Instalación
 
 ```bash
@@ -138,13 +190,34 @@ $curl->acceptStatus(400);             // Acepta 400 como respuesta válida y no 
 ### 📤 Headers, parámetros y JSON
 
 ```php
+// Array asociativo (la clave reemplaza si ya existe)
+$curl->headers([
+    'Content-Type' => 'application/json',
+    'Authorization' => 'Bearer TOKEN',
+    'user-agent' => 'Mi App/1.0',  // Case-insensitive: reemplaza User-Agent por defecto
+]);
+
+// Formato string (header completo)
 $curl->headers([
     'Content-Type: application/json',
-    'Authorization: Bearer TOKEN'
+    'Authorization: Bearer TOKEN',
 ]);
 
 $curl->body(['key' => 'value']); // array , string o JSON
 $curl->json();                   // Activa encabezado JSON automáticamente
+
+// Obtener un header específico (case-insensitive)
+$curl->getHeader('Content-Type');
+```
+
+### 🔍 Métodos GET
+
+```php
+$curl->getUrl();         // URL actual
+$curl->getMethod();      // Método HTTP actual (GET, POST, etc)
+$curl->getOptions();    // Todas las opciones cURL
+$curl->getUserAgent();  // User-Agent actual
+$curl->getUploadFile(); // Objeto CURLFile si se configuró upload
 ```
 
 ---
@@ -153,6 +226,19 @@ $curl->json();                   // Activa encabezado JSON automáticamente
 
 ```php
 $curl->cookie(); // Habilita y reutiliza cookies automáticamente
+
+// Gestion manual de cookies
+$curl->addCookie('session', 'abc123', 'example.com');
+$curl->replaceCookie('session', 'xyz789', 'example.com');
+$curl->deleteCookie('session', 'example.com');
+$curl->deleteCookieCompletely('session'); // Elimina de todos los dominios
+```
+
+#### Archivo de cookies persistentes
+
+```php
+$curl->cookieFile('/tmp/cookies.txt'); // Archivo para cookies persistentes
+$curl->cookie(); // Habilitar para usar el archivo
 ```
 
 ---
@@ -180,6 +266,8 @@ $response->statuscode();    // Código HTTP
 $response->body();          // Texto plano
 $response->json();          // Array si es JSON
 $response->isOk();          // true si status es 2xx
+$response->headers();       // Array de headers de respuesta
+$response->header('content-type'); // Un header específico (case-insensitive)
 ```
 
 ---

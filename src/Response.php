@@ -44,7 +44,7 @@ class Response
     public function getHeader(string $name, $default = null)
     {
         $name = strtolower($name);
-        if (!isset($this->responseHeaders)) {
+        if (empty($this->responseHeaders)) {
             return $default;
         }
         return $this->responseHeaders[$name] ?? $default;
