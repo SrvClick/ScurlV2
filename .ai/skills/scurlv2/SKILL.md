@@ -1,9 +1,9 @@
 ---
-name: Scurl v2 — HTTP Client
+name: Scurl v2
 description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
 ---
 
-# Scurl v2 — Skill Documentation
+# Scurl v2
 
 ## What is Scurl?
 
@@ -680,7 +680,7 @@ $curl->url($url)->get()->send();
 ### 5. `options_method()` vs `options()`
 - `options_method()` → sets HTTP method to OPTIONS
 - `options([...])` → sets raw cURL options
-These are two completely different methods.
+  These are two completely different methods.
 
 ### 6. SSL verification is disabled by default
 `CURLOPT_SSL_VERIFYPEER` and `CURLOPT_SSL_VERIFYHOST` are `false` by default. Enable for production:
