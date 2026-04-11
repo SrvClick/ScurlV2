@@ -208,6 +208,14 @@ $curl->json();                   // Activa encabezado JSON automáticamente
 
 // Obtener un header específico (case-insensitive)
 $curl->getHeader('Content-Type');
+
+// User-Agent: método dedicado tiene máxima prioridad
+$curl->useragent('Mozilla/5.0 (Windows NT 10.0)'); // ⚠️ Siempre reemplaza cualquier User-Agent existente
+
+// Prioridad User-Agent (mayor a menor):
+// 1. useragent('...') - Siempre gana
+// 2. headers(['user-agent' => '...']) - Reemplaza el default
+// 3. Default: SrvClick Scurl/2.0
 ```
 
 ### 🔍 Métodos GET

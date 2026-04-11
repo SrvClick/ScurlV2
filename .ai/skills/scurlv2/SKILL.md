@@ -240,10 +240,15 @@ $curl->headers([
 $curl->getHeader('Authorization'); // → "Bearer TOKEN" or null
 
 // Convenience shortcuts
-$curl->useragent('MyApp/1.0');   // Sets User-Agent header
+$curl->useragent('MyApp/1.0');   // ⚠️ Highest priority - always overrides any other User-Agent (even from headers())
 $curl->getUserAgent();            // Gets current User-Agent string
 $curl->json();                    // Adds Content-Type: application/json
 ```
+
+**User-Agent priority order (highest to lowest):**
+1. `useragent('...')` - Always wins, removes any existing User-Agent header
+2. Custom headers via `headers(['user-agent' => '...'])` - Replaces default
+3. Default: `SrvClick Scurl/2.0`
 
 ---
 
