@@ -1,4 +1,9 @@
-# Scurl v2 — Skill Documentation (Laravel-focused)
+---
+name: Scurl v2 — HTTP Client
+description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
+---
+
+# Scurl v2 — Skill Documentation
 
 ## What is Scurl?
 
@@ -38,9 +43,9 @@ Set PERSISTENT config (headers, cookie, proxy, timeout, useragent)
                                                   ↓
                                             returns Response
                                                   ↓
-                                         reset() is called internally
-                                         (clears: parameters, uploadFile, Content-Type header)
-                                         (keeps: headers, cookies, proxy, timeout, options)
+                                          reset() is called internally
+                                          (clears: parameters, uploadFile, Content-Type header)
+                                          (keeps: headers, cookies, proxy, timeout, options)
 ```
 
 ---
@@ -200,7 +205,7 @@ $curl->json();
 $curl->parameters(['key' => 'value']);
 ```
 
-**⚠️ Body detection logic (from source code):**
+**Body detection logic (from source code):**
 1. If input is an `array` → stored as array, sent as form data or JSON depending on headers.
 2. If input is a string starting with `{` or `[` AND passes `json_validate()` → treated as JSON string, `Content-Type: application/json` auto-added if `auto_json=true`.
 3. Otherwise string → `parse_str()` is applied (form-encoded).
@@ -225,7 +230,7 @@ $curl->headers([
 ]);
 ```
 
-**⚠️ Header merge rules (from source code):**
+**Header merge rules (from source code):**
 - Keys are normalized to lowercase for deduplication comparison.
 - Original capitalization is preserved when actually sending.
 - Calling `headers()` multiple times **merges** (never replaces all headers).
@@ -341,7 +346,6 @@ $curl->cookie();
 
 // Use a specific file (persistent across PHP executions)
 $curl->cookieFile('/tmp/my_session.txt');
-// Or: cookieFile() with no arg also creates a temp file
 
 // Manual cookie management (requires cookieFile to be set first)
 $curl->addCookie('session', 'abc123', 'example.com');
@@ -360,7 +364,7 @@ $response->getCookie('session_id');              // From Set-Cookie response hea
 $response->getCookie('token', 'default');        // With default
 ```
 
-**⚠️ Cookie file format:** Netscape/Mozilla format (tab-separated). Functions parse/write directly from the file. `addCookie` appends. `deleteCookie` filters by name+domain. `deleteCookieCompletely` filters by name across all entries including commented lines.
+**Cookie file format:** Netscape/Mozilla format (tab-separated). Functions parse/write directly from the file. `addCookie` appends. `deleteCookie` filters by name+domain. `deleteCookieCompletely` filters by name across all entries including commented lines.
 
 ---
 
