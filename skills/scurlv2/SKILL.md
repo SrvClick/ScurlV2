@@ -1,9 +1,9 @@
 ---
-name: Scurl v2
+name: Scurl v2 — HTTP Client
 description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
 ---
 
-# Scurl v2
+# Scurl v2 — Skill Documentation
 
 ## What is Scurl?
 
@@ -344,6 +344,7 @@ $response->getHeader('x-rate-limit', '0');    // With default fallback
 // Enable cookie storage (temp file, auto-created)
 $curl->cookie();
 
+// Use a specific file (persistent across PHP executions)
 $curl->cookieFile('/tmp/my_session.txt');
 
 // Manual cookie management (requires cookieFile to be set first)
@@ -358,6 +359,7 @@ $curl->deleteCookie('session', 'example.com');   // Remove from specific domain
 $curl->deleteCookie('session');                  // Remove from all domains
 $curl->deleteCookieCompletely('session');         // Remove ALL entries for name (ignores comments/header lines)
 
+// Get cookie set by server response (requires CURLOPT_HEADER => true)
 $response->getCookie('session_id');              // From Set-Cookie response header
 $response->getCookie('token', 'default');        // With default
 ```
@@ -651,6 +653,15 @@ if ($updated->isOk()) {
 
 ## Critical Gotchas
 
+### 1. Response headers are empty by default
+You must explicitly set `CURLOPT_HEADER => true` before calling `send()`:
+```php
+$curl->options([CURLOPT_HEADER => true]);
+```
+Without this, `$response->headers()`, `$response->getHeader()`, and `$response->getCookie()` all return empty/null.
+
+### 2. Cookie methods require a cookie file set first
+Calling `addCookie()`, `deleteCookie()`, etc. **before** `cookie()` or `cookieFile()` silently fails (returns `false` internally via `lastCookieResult`). Always set the cookie file first:
 ```php
 $curl->cookieFile('/tmp/session.txt');     // Must be first
 $curl->addCookie('token', 'abc', 'x.com'); // Now safe
@@ -669,7 +680,7 @@ $curl->url($url)->get()->send();
 ### 5. `options_method()` vs `options()`
 - `options_method()` → sets HTTP method to OPTIONS
 - `options([...])` → sets raw cURL options
-  These are two completely different methods.
+These are two completely different methods.
 
 ### 6. SSL verification is disabled by default
 `CURLOPT_SSL_VERIFYPEER` and `CURLOPT_SSL_VERIFYHOST` are `false` by default. Enable for production:

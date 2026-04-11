@@ -66,7 +66,7 @@ class Request
         return $this;
     }
 
-    public function deleteCookie(string $name, string $domain = null): self
+    public function deleteCookie(string $name, ?string $domain = null): self
     {
         if (!$this->cookieFile || !file_exists($this->cookieFile)) {
             $this->lastCookieResult = false;
@@ -308,6 +308,10 @@ class Request
     public function getUploadFile(): ?CURLFile
     {
         return $this->uploadFile;
+    }
+    public function getResponseHeaders(): array
+    {
+        return $this->responseHeaders ?? [];
     }
 
     /**

@@ -3,9 +3,8 @@ namespace SrvClick\Scurlv2;
 
 class Response
 {
-    protected string $body;
-    protected int $statusCode;
-    protected array $headers = [];
+    protected string $body = '';
+    protected int $statusCode = 0;
     protected bool $isJson = false;
 
     protected array $config = [
@@ -21,7 +20,7 @@ class Response
     {
         $this->config = array_replace($this->config, $config);
     }
-    public function setCookieFileName(string $cookieFileName): void
+    public function setCookieFileName(?string $cookieFileName): void
     {
         $this->cookieFileName = $cookieFileName;
     }
@@ -74,12 +73,12 @@ class Response
         return $default;
     }
 
-    public function setBody(string $body): void
+    public function setBody(?string $body): void
     {
-        $this->body = $body;
-        $this->isJson = json_decode($body) !== null;
+        $this->body = $body ?? '';
+        $this->isJson = $body !== '' &&json_decode($body) && json_last_error() === JSON_ERROR_NONE;
     }
-    public function setStatusCode($statusCode): void
+    public function setStatusCode(int $statusCode): void
     {
         $this->statusCode = $statusCode;
     }
@@ -96,7 +95,7 @@ class Response
 
     public function headers(): array
     {
-        return $this->headers;
+        return $this->responseHeaders;
     }
 
     public function isJson(): bool
