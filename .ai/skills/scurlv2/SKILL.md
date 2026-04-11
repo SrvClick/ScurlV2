@@ -344,8 +344,9 @@ $response->getHeader('x-rate-limit', '0');    // With default fallback
 // Enable cookie storage (temp file, auto-created)
 $curl->cookie();
 
-// Use a specific file (persistent across PHP executions)
+// Use a specific file (optional - auto-creates temp file if not provided)
 $curl->cookieFile('/tmp/my_session.txt');
+$curl->cookieFile();  // Also works - auto-creates temp file
 
 // Manual cookie management (requires cookieFile to be set first)
 $curl->addCookie('session', 'abc123', 'example.com');
@@ -359,7 +360,7 @@ $curl->deleteCookie('session', 'example.com');   // Remove from specific domain
 $curl->deleteCookie('session');                  // Remove from all domains
 $curl->deleteCookieCompletely('session');         // Remove ALL entries for name (ignores comments/header lines)
 
-// Get cookie set by server response (requires CURLOPT_HEADER => true)
+// Get cookie from server response
 $response->getCookie('session_id');              // From Set-Cookie response header
 $response->getCookie('token', 'default');        // With default
 ```
@@ -653,15 +654,8 @@ if ($updated->isOk()) {
 
 ## Critical Gotchas
 
-### 1. Response headers are empty by default
-You must explicitly set `CURLOPT_HEADER => true` before calling `send()`:
-```php
-$curl->options([CURLOPT_HEADER => true]);
-```
-Without this, `$response->headers()`, `$response->getHeader()`, and `$response->getCookie()` all return empty/null.
-
-### 2. Cookie methods require a cookie file set first
-Calling `addCookie()`, `deleteCookie()`, etc. **before** `cookie()` or `cookieFile()` silently fails (returns `false` internally via `lastCookieResult`). Always set the cookie file first:
+### 1. Cookie methods require a cookie file set first
+Calling `addCookie()`, `deleteCookie()`, etc. **before** `cookie()` or `cookieFile()` silently fails:
 ```php
 $curl->cookieFile('/tmp/session.txt');     // Must be first
 $curl->addCookie('token', 'abc', 'x.com'); // Now safe
