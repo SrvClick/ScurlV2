@@ -14,6 +14,7 @@ class Request
     protected ?CURLFile $uploadFile = null;
 
     protected ?array $responseHeaders = [];
+    protected ?string $forcedUserAgent = null;
 
     protected Response $response;
     protected array|string $parameters = [];
@@ -257,11 +258,11 @@ class Request
     }
     public function setUserAgent(string $userAgent) : void
     {
-        $this->setHeaders(['User-Agent' => $userAgent]);
+        $this->forcedUserAgent = $userAgent;
     }
     public function getUserAgent() : string
     {
-        return $this->getHeader('user-agent');
+        return $this->forcedUserAgent ?? $this->getHeader('user-agent') ?? '';
     }
     public function setParameters(array|string $parameters): void
     {
@@ -397,6 +398,13 @@ class Request
         if ($this->cookieFile !== null) {
             $this->setOptions([CURLOPT_COOKIEJAR => $this->cookieFile]);
             $this->setOptions([CURLOPT_COOKIEFILE => $this->cookieFile]);
+        }
+
+        if ($this->forcedUserAgent !== null) {
+            $currentHeaders = $this->options[CURLOPT_HTTPHEADER] ?? [];
+            $filtered = array_filter($currentHeaders, fn($h) => !str_starts_with(strtolower($h), 'user-agent:'));
+            $this->options[CURLOPT_HTTPHEADER] = array_values($filtered);
+            $this->options[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $this->forcedUserAgent;
         }
 
         curl_setopt_array($ch, $this->options);
