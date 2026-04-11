@@ -20,7 +20,7 @@ class Response
     {
         $this->config = array_replace($this->config, $config);
     }
-    public function setCookieFileName(string $cookieFileName): void
+    public function setCookieFileName(?string $cookieFileName): void
     {
         $this->cookieFileName = $cookieFileName;
     }
