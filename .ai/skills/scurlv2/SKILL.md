@@ -1,9 +1,9 @@
 ---
-name: Scurl v2 — HTTP Client
+name: Scurl v2
 description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
 ---
 
-# Scurl v2 — Skill Documentation
+# Scurl v2
 
 ## What is Scurl?
 
