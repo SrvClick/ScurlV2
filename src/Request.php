@@ -17,7 +17,7 @@ class Request
     protected ?string $forcedUserAgent = null;
 
     protected Response $response;
-    protected array|string $parameters = [];
+    protected array|string|CURLFile $parameters = [];
     protected array $config = [
         'auto_json' => true,
         'exceptions' => false,
@@ -163,6 +163,10 @@ class Request
         unset(
             $this->options[CURLOPT_POSTFIELDS],
             $this->options[CURLOPT_CUSTOMREQUEST],
+            $this->options[CURLOPT_POST],
+            $this->options[CURLOPT_UPLOAD],      // Limpiar configuraciones de subida directa
+            $this->options[CURLOPT_INFILE],
+            $this->options[CURLOPT_INFILESIZE]
         );
 
         if (isset($this->options[CURLOPT_HTTPHEADER])) {
@@ -264,12 +268,14 @@ class Request
     {
         return $this->forcedUserAgent ?? $this->getHeader('user-agent') ?? '';
     }
-    public function setParameters(array|string $parameters): void
+    public function setParameters(array|string|CURLFile $parameters): void
     {
-        if (is_array($parameters)) {
+        // Aceptamos CURLFile directamente
+        if (is_array($parameters) || $parameters instanceof CURLFile) {
             $this->parameters = $parameters;
             return;
         }
+
         $trimmed = trim($parameters);
         if ((str_starts_with($trimmed, '{') || str_starts_with($trimmed, '[')) && json_validate($trimmed)) {
             $this->parameters = $trimmed;
@@ -331,25 +337,61 @@ class Request
     /**
      * @throws Exception
      */
+    /**
+     * @throws Exception
+     */
     public function send() : Response
     {
         $this->response = new Response();
         $this->response->setConfig($this->config);
         $ch = curl_init($this->getUrl());
 
-        if ($this->method === 'POST') {
-            $this->setOptions([ CURLOPT_POST => true, CURLOPT_POSTFIELDS => $this->parameters ]);
-        } elseif ($this->method !== 'GET') {
-            $this->setOptions([ CURLOPT_CUSTOMREQUEST => $this->method,  CURLOPT_POSTFIELDS => $this->parameters ]);
-        }else{
-            unset(
-                $this->options[CURLOPT_POST],
-                $this->options[CURLOPT_POSTFIELDS],
-                $this->options[CURLOPT_CUSTOMREQUEST]
-            );
+        $fileStream = null;
+
+        // 1. Manejo del Body (Subida cruda de archivo vs parámetros normales)
+        if ($this->parameters instanceof CURLFile) {
+            $filePath = $this->parameters->getFilename();
+
+            if (!is_file($filePath)) {
+                throw new InvalidArgumentException("Archivo no encontrado: $filePath");
+            }
+
+            $fileStream = fopen($filePath, 'r');
+
+            $this->setOptions([
+                CURLOPT_UPLOAD => true,
+                CURLOPT_INFILE => $fileStream,
+                CURLOPT_INFILESIZE => filesize($filePath),
+            ]);
+
+            // cURL por defecto cambia a PUT con CURLOPT_UPLOAD, forzamos el método original si es distinto
+            if ($this->method !== 'PUT') {
+                $this->setOptions([CURLOPT_CUSTOMREQUEST => $this->method]);
+            }
+
+            // Inyectar el Content-Type si el CURLFile lo tiene definido
+            $mime = $this->parameters->getMimeType();
+            if ($mime) {
+                $this->setHeaders(['Content-Type' => $mime]);
+            }
+
+        } else {
+            // Lógica original para arrays y strings
+            if ($this->method === 'POST') {
+                $this->setOptions([ CURLOPT_POST => true, CURLOPT_POSTFIELDS => $this->parameters ]);
+            } elseif ($this->method !== 'GET') {
+                $this->setOptions([ CURLOPT_CUSTOMREQUEST => $this->method,  CURLOPT_POSTFIELDS => $this->parameters ]);
+            } else {
+                unset(
+                    $this->options[CURLOPT_POST],
+                    $this->options[CURLOPT_POSTFIELDS],
+                    $this->options[CURLOPT_CUSTOMREQUEST]
+                );
+            }
         }
 
 
+        // 2. Manejo de lectura de Headers
         if (isset($this->options[CURLOPT_HEADER]) && $this->options[CURLOPT_HEADER] === true) {
 
             // Reiniciar headers para esta request
@@ -391,15 +433,13 @@ class Request
             ]);
         }
 
-
-
-
-
+        // 3. Manejo de Cookies
         if ($this->cookieFile !== null) {
             $this->setOptions([CURLOPT_COOKIEJAR => $this->cookieFile]);
             $this->setOptions([CURLOPT_COOKIEFILE => $this->cookieFile]);
         }
 
+        // 4. Manejo de User-Agent forzado
         if ($this->forcedUserAgent !== null) {
             $currentHeaders = $this->options[CURLOPT_HTTPHEADER] ?? [];
             $filtered = array_filter($currentHeaders, fn($h) => !str_starts_with(strtolower($h), 'user-agent:'));
@@ -407,11 +447,19 @@ class Request
             $this->options[CURLOPT_HTTPHEADER][] = 'User-Agent: ' . $this->forcedUserAgent;
         }
 
+        // 5. Ejecución de cURL
         curl_setopt_array($ch, $this->options);
         $body   = curl_exec($ch);
         $error  = curl_error($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        // ¡Importante! Cerrar el recurso del archivo si se abrió
+        if (is_resource($fileStream)) {
+            fclose($fileStream);
+        }
+
+        // 6. Construcción de la respuesta
         $this->response->setBody($body);
         $this->response->setStatusCode($status);
         $this->response->setCookieFileName($this->cookieFile);
@@ -426,6 +474,7 @@ class Request
         ) {
             throw new Exception("HTTP Error: $status - " . $this->response->body() . ($error ? " - Error: $error" : ""));
         }
+
         $this->reset();
         return $this->response;
     }

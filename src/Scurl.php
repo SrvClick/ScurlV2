@@ -173,7 +173,7 @@ class Scurl
     {
         return $this->request->getUserAgent();
     }
-    public function parameters(array|string $parameters): Scurl
+    public function parameters(array|string|CURLFile $parameters): Scurl
     {
         $this->request->setParameters($parameters);
         return $this;
@@ -193,7 +193,7 @@ class Scurl
         return $this;
     }
 
-    public function body(array|string $parameters): Scurl
+    public function body(array|string|CURLFile $parameters): Scurl
     {
         $this->parameters($parameters);
         return $this;

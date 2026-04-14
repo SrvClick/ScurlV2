@@ -3,7 +3,7 @@ namespace SrvClick\Scurlv2;
 
 class Response
 {
-    protected string $body = '';
+    protected ?string $body = null;
     protected int $statusCode = 0;
     protected bool $isJson = false;
 
