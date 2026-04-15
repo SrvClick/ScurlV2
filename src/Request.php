@@ -336,9 +336,6 @@ class Request
     /**
      * @throws Exception
      */
-    /**
-     * @throws Exception
-     */
     public function send() : Response
     {
         $this->response = new Response();
@@ -448,17 +445,23 @@ class Request
 
         // 5. Ejecución de cURL
         curl_setopt_array($ch, $this->options);
-        $body   = curl_exec($ch);
-        $error  = curl_error($ch);
-        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $rawBody = curl_exec($ch);
+        $error   = curl_error($ch);
+        $status  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE); // Obtenemos el tamaño del header
         curl_close($ch);
 
-        // ¡Importante! Cerrar el recurso del archivo si se abrió
         if (is_resource($fileStream)) {
             fclose($fileStream);
         }
 
-        // 6. Construcción de la respuesta
+        // --- Limpiamos el body si activamos los headers en el output ---
+        if (isset($this->options[CURLOPT_HEADER]) && $this->options[CURLOPT_HEADER] === true && $rawBody !== false) {
+            $body = substr($rawBody, $headerSize);
+        } else {
+            $body = $rawBody;
+        }
+
         $this->response->setBody($body);
         $this->response->setStatusCode($status);
         $this->response->setCookieFileName($this->cookieFile);
