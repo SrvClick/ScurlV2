@@ -50,8 +50,6 @@ class Scurl
         return $this;
     }
 
-
-
     public function proxy(string|array $proxy): static
     {
         if (is_string($proxy)) {
@@ -102,16 +100,12 @@ class Scurl
 
         return $this;
     }
-
     public function cookieFile(?string $file = null): self
     {
 
         $this->request->cookieFile($file);
         return $this;
     }
-
-
-
     public function cookie() : Scurl
     {
         $this->request->enableCookies();
@@ -208,9 +202,10 @@ class Scurl
     {
         return $this->request->getUploadFile();
     }
-    public function getResponseHeaders(): array
+    public function getHeaders(): Scurl
     {
-        return $this->request->getResponseHeaders();
+        $this->request->setOptions([CURLOPT_HEADER => true]);
+        return $this;
     }
 
 

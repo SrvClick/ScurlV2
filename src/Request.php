@@ -313,7 +313,6 @@ class Request
                 return true;
             }
         }
-
         return false;
     }
 

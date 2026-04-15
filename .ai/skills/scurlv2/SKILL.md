@@ -1,11 +1,11 @@
 ---
 name: scurl-v2
-description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
+description: Modern PHP 8.3+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
 ---
 
 ## What is Scurl?
 
-**Scurl** is a modern PHP 8.0+ HTTP client built on top of cURL, with a fluent (chainable) API. It wraps three classes:
+**Scurl** is a modern PHP 8.3+ HTTP client built on top of cURL, with a fluent (chainable) API. It wraps three classes:
 
 ```
 Scurl          ← Public fluent facade. All user-facing methods live here.
@@ -23,7 +23,7 @@ Scurl          ← Public fluent facade. All user-facing methods live here.
 composer require srvclick/scurlv2
 ```
 
-Requires PHP 8.0+ and the `ext-curl` extension enabled.
+Requires PHP 8.3+ and the `ext-curl` and `ext-json` extensions.
 
 ---
 
@@ -196,6 +196,10 @@ $curl->body('{"key":"value"}');
 // Form-encoded string → parsed via parse_str(), sent as form data
 $curl->body('key=value&foo=bar');
 
+// CURLFile as raw body → sends the file binary as the entire request body (no multipart)
+$curl->upload('/path/to/file.jpg')
+     ->body($curl->getUploadFile());
+
 // Explicit JSON header (use when you want to force it regardless of body format)
 $curl->json();
 
@@ -205,8 +209,9 @@ $curl->parameters(['key' => 'value']);
 
 **Body detection logic (from source code):**
 1. If input is an `array` → stored as array, sent as form data or JSON depending on headers.
-2. If input is a string starting with `{` or `[` AND passes `json_validate()` → treated as JSON string, `Content-Type: application/json` auto-added if `auto_json=true`.
-3. Otherwise string → `parse_str()` is applied (form-encoded).
+2. If input is a `CURLFile` → used directly as the raw request body (no multipart wrapper).
+3. If input is a string starting with `{` or `[` AND passes `json_validate()` → treated as JSON string, `Content-Type: application/json` auto-added if `auto_json=true`.
+4. Otherwise string → `parse_str()` is applied (form-encoded).
 
 ---
 
@@ -236,11 +241,8 @@ $curl->headers([
 - Headers **persist across requests** (only Content-Type added by JSON body is reset).
 
 ```php
-// Read a request header (case-insensitive)
-$curl->getHeader('Authorization'); // → "Bearer TOKEN" or null
-
 // Convenience shortcuts
-$curl->useragent('MyApp/1.0');   // ⚠️ Highest priority - always overrides any other User-Agent (even from headers())
+$curl->useragent('MyApp/1.0');   // ⚠️ Highest priority - always overrides any other User-Agent
 $curl->getUserAgent();            // Gets current User-Agent string
 $curl->json();                    // Adds Content-Type: application/json
 ```
@@ -271,7 +273,6 @@ $curl->config([
 // Option 1: Manual check (exceptions disabled by default)
 $response = $curl->url('...')->get()->send();
 if (! $response->isOk()) {
-    // Handle HTTP error
     Log::error("HTTP Error {$response->statuscode()}: {$response->body()}");
 }
 
@@ -280,7 +281,6 @@ $curl->config(['exceptions' => true]);
 try {
     $response = $curl->url('...')->get()->send();
 } catch (\Exception $e) {
-    // Exception message: "HTTP Error: 404 - Not Found"
     Log::error($e->getMessage());
 }
 
@@ -304,7 +304,6 @@ $curl->options([
     CURLOPT_ENCODING       => '',        // Accept gzip/deflate
     CURLOPT_SSL_VERIFYPEER => true,      // Enable SSL verification (disabled by default)
     CURLOPT_CONNECTTIMEOUT => 10,
-    CURLOPT_HEADER         => true,      // Enable response header capture
     CURLOPT_COOKIEJAR      => '/tmp/c.txt',
     CURLOPT_COOKIEFILE     => '/tmp/c.txt',
 ]);
@@ -328,15 +327,23 @@ $curl->getOptions();
 
 ### Response Headers
 
-Response headers are **only captured** when `CURLOPT_HEADER => true` is set:
+Use the fluent `getHeaders()` method to capture response headers. This sets `CURLOPT_HEADER => true` internally:
 
 ```php
-$curl->options([CURLOPT_HEADER => true]);
-$response = $curl->url('https://api.example.com')->get()->send();
+$response = $curl->url('https://api.example.com')
+                 ->get()
+                 ->getHeaders()  // ← fluent method, chains like any other
+                 ->send();
 
 $response->headers();                         // All headers as assoc array (lowercase keys)
 $response->getHeader('content-type');         // Single header by name (case-insensitive)
 $response->getHeader('x-rate-limit', '0');    // With default fallback
+```
+
+Alternatively via `options()`:
+
+```php
+$curl->options([CURLOPT_HEADER => true]);
 ```
 
 ---
@@ -363,7 +370,7 @@ $curl->deleteCookie('session', 'example.com');   // Remove from specific domain
 $curl->deleteCookie('session');                  // Remove from all domains
 $curl->deleteCookieCompletely('session');         // Remove ALL entries for name (ignores comments/header lines)
 
-// Get cookie from server response
+// Get cookie from server response (requires getHeaders() or CURLOPT_HEADER)
 $response->getCookie('session_id');              // From Set-Cookie response header
 $response->getCookie('token', 'default');        // With default
 ```
@@ -389,6 +396,8 @@ $curl->proxy(['proxy.example.com', 8080, 'user', 'pass']);
 
 ### File Upload
 
+#### Multipart (file + additional form fields)
+
 ```php
 // 1. Register the file (throws InvalidArgumentException if not found)
 $curl->upload('/absolute/path/to/file.pdf');
@@ -400,7 +409,22 @@ $curl->body([
 ])
 ->post()
 ->send();
+```
 
+#### Raw (file binary as the entire request body)
+
+For REST APIs that expect the binary directly (images, documents, etc.):
+
+```php
+$curl->url('https://api.example.com/upload')
+     ->upload('/path/to/image.jpg')
+     ->headers(['Content-Type' => 'application/octet-stream'])
+     ->put()
+     ->body($curl->getUploadFile())  // CURLFile passed directly, no multipart
+     ->send();
+```
+
+```php
 // getUploadFile() returns null if upload() was not called
 $curl->getUploadFile(); // → CURLFile|null
 ```
@@ -427,12 +451,12 @@ $response->isJson();            // true if body is valid JSON
 $response->statuscode();        // HTTP status code as int (e.g. 200, 404)
 $response->isOk();              // true if status is 200–299
 
-// Headers (only populated when CURLOPT_HEADER => true)
+// Headers (only populated when getHeaders() was called or CURLOPT_HEADER => true)
 $response->headers();                        // All response headers (lowercase keys)
 $response->getHeader('content-type');        // Case-insensitive lookup
 $response->getHeader('x-token', 'default'); // With fallback default
 
-// Cookies set by server (from Set-Cookie response header, requires CURLOPT_HEADER)
+// Cookies set by server (from Set-Cookie response header, requires getHeaders())
 $response->getCookie('session_id');          // Cookie value or null
 $response->getCookie('session_id', '');      // With fallback default
 
@@ -451,6 +475,7 @@ Called automatically after every `send()`. Understanding this is critical.
 | `body()` / `parameters()` | ✅ | |
 | `upload()` file | ✅ | |
 | `Content-Type: application/json` header | ✅ | |
+| `getHeaders()` / `CURLOPT_HEADER` | ✅ | |
 | `headers()` (custom headers) | | ✅ |
 | `useragent()` | | ✅ |
 | `cookie()` / `cookieFile()` | | ✅ |
@@ -471,7 +496,6 @@ Called automatically after every `send()`. Understanding this is critical.
 namespace App\Services;
 
 use SrvClick\Scurlv2\Scurl;
-use SrvClick\Scurlv2\Response;
 use Exception;
 
 class ExternalApiService
@@ -505,7 +529,7 @@ class ExternalApiService
         $response = $this->curl
             ->url(config('services.externalapi.url') . '/orders')
             ->post()
-            ->body($data)      // array → form data, or use body(json_encode($data)) for JSON
+            ->body($data)
             ->send();
         return $response->json() ?? [];
     }
@@ -516,7 +540,7 @@ class ExternalApiService
             $this->curl
                 ->url(config('services.externalapi.url') . "/orders/{$id}")
                 ->put()
-                ->body(json_encode($data))  // JSON string: auto-adds Content-Type
+                ->body(json_encode($data))
                 ->send();
             return true;
         } catch (Exception $e) {
@@ -546,10 +570,7 @@ if (! $loginResponse->isOk()) {
 }
 
 // Step 2: Authenticated request (cookies sent automatically)
-$dataResponse = $curl
-    ->url('https://site.com/api/data')
-    ->get()
-    ->send();
+$dataResponse = $curl->url('https://site.com/api/data')->get()->send();
 
 // Step 3: Manipulate cookies manually
 $curl->replaceCookie('pref', 'dark_mode', 'site.com');
@@ -562,12 +583,12 @@ $curl->url('https://site.com/logout')->post()->send();
 
 ```php
 $curl = new Scurl();
-$curl->options([CURLOPT_HEADER => true])  // Must enable to capture response headers
-     ->useragent('Mozilla/5.0 (compatible)');
+$curl->useragent('Mozilla/5.0 (compatible)');
 
 $response = $curl
     ->url('https://api.example.com/resource')
     ->get()
+    ->getHeaders()  // Fluent method — enables response header capture
     ->send();
 
 $contentType  = $response->getHeader('content-type');
@@ -575,7 +596,7 @@ $rateLimit    = $response->getHeader('x-ratelimit-remaining', 'unknown');
 $redirectedTo = $response->getHeader('location');
 ```
 
-### File Upload to API
+### Multipart File Upload to API
 
 ```php
 $curl = new Scurl();
@@ -595,6 +616,23 @@ $response = $curl
 if ($response->isOk()) {
     $uploadedUrl = $response->json()['url'] ?? null;
 }
+```
+
+### Raw File Upload (Binary Body)
+
+For APIs that expect the raw binary content directly (e.g. image storage, document processing):
+
+```php
+$curl = new Scurl();
+$curl->headers(['Authorization' => 'Bearer ' . config('services.storage.key')]);
+
+$response = $curl
+    ->url('https://storage.api.com/images/profile.jpg')
+    ->upload(storage_path('app/uploads/photo.jpg'))
+    ->headers(['Content-Type' => 'image/jpeg'])
+    ->put()
+    ->body($curl->getUploadFile())  // Raw binary body, no multipart
+    ->send();
 ```
 
 ### Using Proxy (with env config)
@@ -622,7 +660,7 @@ $response = $curl->url('https://geo-restricted.api.com/data')->get()->send();
 ```php
 $curl = new Scurl();
 $curl->config(['exceptions' => true])
-     ->cookie()                     // Session cookies persist across all requests
+     ->cookie()
      ->headers([
          'Accept'        => 'application/json',
          'Authorization' => 'Bearer ' . $token,
@@ -664,22 +702,23 @@ $curl->cookieFile('/tmp/session.txt');     // Must be first
 $curl->addCookie('token', 'abc', 'x.com'); // Now safe
 ```
 
-### 3. `upload()` path must be absolute
+### 2. `upload()` path must be absolute
 `upload()` calls `is_file($path)` — relative paths may fail depending on PHP working directory. Use Laravel's `storage_path()` or `base_path()`.
 
-### 4. `body()` with array on GET has no effect on URL
-Scurl does NOT append array parameters as query string for GET requests. For GET with query params, build the URL manually:
+### 3. `body()` with array on GET has no effect on URL
+Scurl does NOT append array parameters as query string for GET requests. Build the URL manually:
 ```php
 $url = 'https://api.example.com/search?' . http_build_query(['q' => 'test', 'page' => 2]);
 $curl->url($url)->get()->send();
 ```
 
-### 5. `options_method()` vs `options()`
+### 4. `options_method()` vs `options()`
 - `options_method()` → sets HTTP method to OPTIONS
 - `options([...])` → sets raw cURL options
-  These are two completely different methods.
 
-### 6. SSL verification is disabled by default
+These are two completely different methods.
+
+### 5. SSL verification is disabled by default
 `CURLOPT_SSL_VERIFYPEER` and `CURLOPT_SSL_VERIFYHOST` are `false` by default. Enable for production:
 ```php
 $curl->options([
@@ -688,15 +727,22 @@ $curl->options([
 ]);
 ```
 
-### 7. `config()` merges, not replaces
+### 6. `config()` merges, not replaces
 ```php
 $curl->config(['exceptions' => true]);
 $curl->config(['auto_json' => false]);
 // Result: ['exceptions' => true, 'auto_json' => false]  ← both applied
 ```
 
-### 8. `acceptStatus()` only matters when `exceptions => true`
+### 7. `acceptStatus()` only matters when `exceptions => true`
 If exceptions are disabled (default), `acceptStatus()` does nothing visible — `isOk()` still only returns `true` for 2xx.
+
+### 8. `getHeaders()` resets after each send
+Unlike most persistent options, `getHeaders()` (i.e. `CURLOPT_HEADER`) **clears after send()**. Call it again on each request where you need response headers.
+
+### 9. Raw upload vs multipart upload
+- `body(['file' => $curl->getUploadFile()])` → multipart/form-data, file is one field among others
+- `body($curl->getUploadFile())` → raw binary body, the file IS the entire request body
 
 ---
 
@@ -743,13 +789,15 @@ dd([
 | Custom headers | `$curl->headers(['X-Key' => 'val'])` |
 | Auth header | `$curl->headers(['Authorization' => 'Bearer '.$token])` |
 | With cookies | `$curl->cookie()->url($url)->get()->send()` |
-| File upload | `$curl->upload($path)->body(['f' => $curl->getUploadFile()])->post()->send()` |
+| Multipart upload | `$curl->upload($path)->body(['f' => $curl->getUploadFile()])->post()->send()` |
+| Raw binary upload | `$curl->upload($path)->body($curl->getUploadFile())->put()->send()` |
 | Proxy | `$curl->proxy('http://user:pass@host:port')` |
 | Throw on error | `$curl->config(['exceptions' => true])` |
 | Accept 4xx | `$curl->acceptStatus(400)` |
+| Capture response headers | `->getHeaders()->send()` |
 | Response body | `$response->body()` |
 | Response JSON | `$response->json()` |
 | Response status | `$response->statuscode()` |
 | Check success | `$response->isOk()` |
-| Response header | `$response->getHeader('content-type')` (needs CURLOPT_HEADER) |
-| Response cookie | `$response->getCookie('name')` (needs CURLOPT_HEADER) |
+| Response header | `$response->getHeader('content-type')` (needs `getHeaders()`) |
+| Response cookie | `$response->getCookie('name')` (needs `getHeaders()`) |
