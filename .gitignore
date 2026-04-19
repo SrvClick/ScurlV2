@@ -7,3 +7,6 @@ composer.lock
 .env
 .DS_Store
 Thumbs.db
+
+# Notas internas de desarrollo — no se publican
+BUGS.md

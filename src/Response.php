@@ -76,7 +76,7 @@ class Response
     public function setBody(?string $body): void
     {
         $this->body = $body ?? '';
-        $this->isJson = $body !== '' &&json_decode($body) && json_last_error() === JSON_ERROR_NONE;
+        $this->isJson = $this->body !== '' && json_validate($this->body);
     }
     public function setStatusCode(int $statusCode): void
     {
@@ -103,7 +103,20 @@ class Response
         return $this->isJson;
     }
 
+    /**
+     * @deprecated Usa array() en su lugar. Este método será removido en una versión futura.
+     *             Su nombre es engañoso ya que retorna un array PHP, no una cadena JSON.
+     */
     public function json(): ?array
+    {
+        return $this->array();
+    }
+
+    /**
+     * Decodifica el body de la respuesta como un array PHP asociativo.
+     * Reemplazo recomendado de json(), que tenía un nombre engañoso.
+     */
+    public function array(): ?array
     {
         return $this->isJson ? json_decode($this->body, true) : null;
     }

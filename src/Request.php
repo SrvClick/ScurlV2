@@ -166,7 +166,9 @@ class Request
             $this->options[CURLOPT_POST],
             $this->options[CURLOPT_UPLOAD],      // Limpiar configuraciones de subida directa
             $this->options[CURLOPT_INFILE],
-            $this->options[CURLOPT_INFILESIZE]
+            $this->options[CURLOPT_INFILESIZE],
+            $this->options[CURLOPT_HEADER],          // Captura de headers es per-request
+            $this->options[CURLOPT_HEADERFUNCTION]   // también limpiamos el closure capturador
         );
 
         if (isset($this->options[CURLOPT_HTTPHEADER])) {
