@@ -162,8 +162,6 @@ $curl->insecure(false);                         // SSL re-activado
 $curl->url('https://api.prod.com')->get()->send(); // verifica normalmente
 ```
 
-> ⚠️ **Nunca uses `insecure()` en producción contra servidores reales.** Deja la conexión vulnerable a ataques de intermediario. Solo tiene sentido en entornos controlados donde confías en la red de manera explícita.
-
 ---
 
 ### 📤 Headers, parámetros y JSON
