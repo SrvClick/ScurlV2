@@ -1,11 +1,11 @@
 ---
 name: scurl-v2
-description: Modern PHP 8.3+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
+description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
 ---
 
 ## What is Scurl?
 
-**Scurl** is a modern PHP 8.3+ HTTP client built on top of cURL, with a fluent (chainable) API. It wraps three classes:
+**Scurl** is a modern PHP 8.0+ HTTP client built on top of cURL, with a fluent (chainable) API. It wraps three classes:
 
 ```
 Scurl          ← Public fluent facade. All user-facing methods live here.
@@ -23,7 +23,7 @@ Scurl          ← Public fluent facade. All user-facing methods live here.
 composer require srvclick/scurlv2
 ```
 
-Requires PHP 8.3+ and the `ext-curl` and `ext-json` extensions.
+Requires PHP 8.0+ and the `ext-curl` extension enabled.
 
 ---
 
@@ -196,10 +196,6 @@ $curl->body('{"key":"value"}');
 // Form-encoded string → parsed via parse_str(), sent as form data
 $curl->body('key=value&foo=bar');
 
-// CURLFile as raw body → sends the file binary as the entire request body (no multipart)
-$curl->upload('/path/to/file.jpg')
-     ->body($curl->getUploadFile());
-
 // Explicit JSON header (use when you want to force it regardless of body format)
 $curl->json();
 
@@ -209,9 +205,8 @@ $curl->parameters(['key' => 'value']);
 
 **Body detection logic (from source code):**
 1. If input is an `array` → stored as array, sent as form data or JSON depending on headers.
-2. If input is a `CURLFile` → used directly as the raw request body (no multipart wrapper).
-3. If input is a string starting with `{` or `[` AND passes `json_validate()` → treated as JSON string, `Content-Type: application/json` auto-added if `auto_json=true`.
-4. Otherwise string → `parse_str()` is applied (form-encoded).
+2. If input is a string starting with `{` or `[` AND passes `json_validate()` → treated as JSON string, `Content-Type: application/json` auto-added if `auto_json=true`.
+3. Otherwise string → `parse_str()` is applied (form-encoded).
 
 ---
 
@@ -241,8 +236,11 @@ $curl->headers([
 - Headers **persist across requests** (only Content-Type added by JSON body is reset).
 
 ```php
+// Read a request header (case-insensitive)
+$curl->getHeader('Authorization'); // → "Bearer TOKEN" or null
+
 // Convenience shortcuts
-$curl->useragent('MyApp/1.0');   // ⚠️ Highest priority - always overrides any other User-Agent
+$curl->useragent('MyApp/1.0');   // ⚠️ Highest priority - always overrides any other User-Agent (even from headers())
 $curl->getUserAgent();            // Gets current User-Agent string
 $curl->json();                    // Adds Content-Type: application/json
 ```
@@ -273,6 +271,7 @@ $curl->config([
 // Option 1: Manual check (exceptions disabled by default)
 $response = $curl->url('...')->get()->send();
 if (! $response->isOk()) {
+    // Handle HTTP error
     Log::error("HTTP Error {$response->statuscode()}: {$response->body()}");
 }
 
@@ -281,6 +280,7 @@ $curl->config(['exceptions' => true]);
 try {
     $response = $curl->url('...')->get()->send();
 } catch (\Exception $e) {
+    // Exception message: "HTTP Error: 404 - Not Found"
     Log::error($e->getMessage());
 }
 
@@ -304,6 +304,7 @@ $curl->options([
     CURLOPT_ENCODING       => '',        // Accept gzip/deflate
     CURLOPT_SSL_VERIFYPEER => true,      // Enable SSL verification (disabled by default)
     CURLOPT_CONNECTTIMEOUT => 10,
+    CURLOPT_HEADER         => true,      // Enable response header capture
     CURLOPT_COOKIEJAR      => '/tmp/c.txt',
     CURLOPT_COOKIEFILE     => '/tmp/c.txt',
 ]);
@@ -327,23 +328,15 @@ $curl->getOptions();
 
 ### Response Headers
 
-Use the fluent `getHeaders()` method to capture response headers. This sets `CURLOPT_HEADER => true` internally:
+Response headers are **only captured** when `CURLOPT_HEADER => true` is set:
 
 ```php
-$response = $curl->url('https://api.example.com')
-                 ->get()
-                 ->getHeaders()  // ← fluent method, chains like any other
-                 ->send();
+$curl->options([CURLOPT_HEADER => true]);
+$response = $curl->url('https://api.example.com')->get()->send();
 
 $response->headers();                         // All headers as assoc array (lowercase keys)
 $response->getHeader('content-type');         // Single header by name (case-insensitive)
 $response->getHeader('x-rate-limit', '0');    // With default fallback
-```
-
-Alternatively via `options()`:
-
-```php
-$curl->options([CURLOPT_HEADER => true]);
 ```
 
 ---
@@ -370,7 +363,7 @@ $curl->deleteCookie('session', 'example.com');   // Remove from specific domain
 $curl->deleteCookie('session');                  // Remove from all domains
 $curl->deleteCookieCompletely('session');         // Remove ALL entries for name (ignores comments/header lines)
 
-// Get cookie from server response (requires getHeaders() or CURLOPT_HEADER)
+// Get cookie from server response
 $response->getCookie('session_id');              // From Set-Cookie response header
 $response->getCookie('token', 'default');        // With default
 ```
@@ -396,8 +389,6 @@ $curl->proxy(['proxy.example.com', 8080, 'user', 'pass']);
 
 ### File Upload
 
-#### Multipart (file + additional form fields)
-
 ```php
 // 1. Register the file (throws InvalidArgumentException if not found)
 $curl->upload('/absolute/path/to/file.pdf');
@@ -409,22 +400,7 @@ $curl->body([
 ])
 ->post()
 ->send();
-```
 
-#### Raw (file binary as the entire request body)
-
-For REST APIs that expect the binary directly (images, documents, etc.):
-
-```php
-$curl->url('https://api.example.com/upload')
-     ->upload('/path/to/image.jpg')
-     ->headers(['Content-Type' => 'application/octet-stream'])
-     ->put()
-     ->body($curl->getUploadFile())  // CURLFile passed directly, no multipart
-     ->send();
-```
-
-```php
 // getUploadFile() returns null if upload() was not called
 $curl->getUploadFile(); // → CURLFile|null
 ```
@@ -446,17 +422,18 @@ $response = $curl->url('...')
 
 ```php
 $response->body();              // Raw response body as string
-$response->json();              // Decoded JSON as array, or null if not JSON
+$response->array();             // Decoded JSON as array, or null if not JSON (PREFERRED)
+$response->json();              // @deprecated — alias of array(). Will be removed.
 $response->isJson();            // true if body is valid JSON
 $response->statuscode();        // HTTP status code as int (e.g. 200, 404)
 $response->isOk();              // true if status is 200–299
 
-// Headers (only populated when getHeaders() was called or CURLOPT_HEADER => true)
+// Headers (only populated when CURLOPT_HEADER => true)
 $response->headers();                        // All response headers (lowercase keys)
 $response->getHeader('content-type');        // Case-insensitive lookup
 $response->getHeader('x-token', 'default'); // With fallback default
 
-// Cookies set by server (from Set-Cookie response header, requires getHeaders())
+// Cookies set by server (from Set-Cookie response header, requires CURLOPT_HEADER)
 $response->getCookie('session_id');          // Cookie value or null
 $response->getCookie('session_id', '');      // With fallback default
 
@@ -475,7 +452,6 @@ Called automatically after every `send()`. Understanding this is critical.
 | `body()` / `parameters()` | ✅ | |
 | `upload()` file | ✅ | |
 | `Content-Type: application/json` header | ✅ | |
-| `getHeaders()` / `CURLOPT_HEADER` | ✅ | |
 | `headers()` (custom headers) | | ✅ |
 | `useragent()` | | ✅ |
 | `cookie()` / `cookieFile()` | | ✅ |
@@ -496,6 +472,7 @@ Called automatically after every `send()`. Understanding this is critical.
 namespace App\Services;
 
 use SrvClick\Scurlv2\Scurl;
+use SrvClick\Scurlv2\Response;
 use Exception;
 
 class ExternalApiService
@@ -529,7 +506,7 @@ class ExternalApiService
         $response = $this->curl
             ->url(config('services.externalapi.url') . '/orders')
             ->post()
-            ->body($data)
+            ->body($data)      // array → form data, or use body(json_encode($data)) for JSON
             ->send();
         return $response->json() ?? [];
     }
@@ -540,7 +517,7 @@ class ExternalApiService
             $this->curl
                 ->url(config('services.externalapi.url') . "/orders/{$id}")
                 ->put()
-                ->body(json_encode($data))
+                ->body(json_encode($data))  // JSON string: auto-adds Content-Type
                 ->send();
             return true;
         } catch (Exception $e) {
@@ -570,7 +547,10 @@ if (! $loginResponse->isOk()) {
 }
 
 // Step 2: Authenticated request (cookies sent automatically)
-$dataResponse = $curl->url('https://site.com/api/data')->get()->send();
+$dataResponse = $curl
+    ->url('https://site.com/api/data')
+    ->get()
+    ->send();
 
 // Step 3: Manipulate cookies manually
 $curl->replaceCookie('pref', 'dark_mode', 'site.com');
@@ -583,12 +563,12 @@ $curl->url('https://site.com/logout')->post()->send();
 
 ```php
 $curl = new Scurl();
-$curl->useragent('Mozilla/5.0 (compatible)');
+$curl->options([CURLOPT_HEADER => true])  // Must enable to capture response headers
+     ->useragent('Mozilla/5.0 (compatible)');
 
 $response = $curl
     ->url('https://api.example.com/resource')
     ->get()
-    ->getHeaders()  // Fluent method — enables response header capture
     ->send();
 
 $contentType  = $response->getHeader('content-type');
@@ -596,7 +576,7 @@ $rateLimit    = $response->getHeader('x-ratelimit-remaining', 'unknown');
 $redirectedTo = $response->getHeader('location');
 ```
 
-### Multipart File Upload to API
+### File Upload to API
 
 ```php
 $curl = new Scurl();
@@ -616,23 +596,6 @@ $response = $curl
 if ($response->isOk()) {
     $uploadedUrl = $response->json()['url'] ?? null;
 }
-```
-
-### Raw File Upload (Binary Body)
-
-For APIs that expect the raw binary content directly (e.g. image storage, document processing):
-
-```php
-$curl = new Scurl();
-$curl->headers(['Authorization' => 'Bearer ' . config('services.storage.key')]);
-
-$response = $curl
-    ->url('https://storage.api.com/images/profile.jpg')
-    ->upload(storage_path('app/uploads/photo.jpg'))
-    ->headers(['Content-Type' => 'image/jpeg'])
-    ->put()
-    ->body($curl->getUploadFile())  // Raw binary body, no multipart
-    ->send();
 ```
 
 ### Using Proxy (with env config)
@@ -660,7 +623,7 @@ $response = $curl->url('https://geo-restricted.api.com/data')->get()->send();
 ```php
 $curl = new Scurl();
 $curl->config(['exceptions' => true])
-     ->cookie()
+     ->cookie()                     // Session cookies persist across all requests
      ->headers([
          'Accept'        => 'application/json',
          'Authorization' => 'Bearer ' . $token,
@@ -702,23 +665,22 @@ $curl->cookieFile('/tmp/session.txt');     // Must be first
 $curl->addCookie('token', 'abc', 'x.com'); // Now safe
 ```
 
-### 2. `upload()` path must be absolute
+### 3. `upload()` path must be absolute
 `upload()` calls `is_file($path)` — relative paths may fail depending on PHP working directory. Use Laravel's `storage_path()` or `base_path()`.
 
-### 3. `body()` with array on GET has no effect on URL
-Scurl does NOT append array parameters as query string for GET requests. Build the URL manually:
+### 4. `body()` with array on GET has no effect on URL
+Scurl does NOT append array parameters as query string for GET requests. For GET with query params, build the URL manually:
 ```php
 $url = 'https://api.example.com/search?' . http_build_query(['q' => 'test', 'page' => 2]);
 $curl->url($url)->get()->send();
 ```
 
-### 4. `options_method()` vs `options()`
+### 5. `options_method()` vs `options()`
 - `options_method()` → sets HTTP method to OPTIONS
 - `options([...])` → sets raw cURL options
+  These are two completely different methods.
 
-These are two completely different methods.
-
-### 5. SSL verification is disabled by default
+### 6. SSL verification is disabled by default
 `CURLOPT_SSL_VERIFYPEER` and `CURLOPT_SSL_VERIFYHOST` are `false` by default. Enable for production:
 ```php
 $curl->options([
@@ -727,22 +689,386 @@ $curl->options([
 ]);
 ```
 
-### 6. `config()` merges, not replaces
+### 7. `config()` merges, not replaces
 ```php
 $curl->config(['exceptions' => true]);
 $curl->config(['auto_json' => false]);
 // Result: ['exceptions' => true, 'auto_json' => false]  ← both applied
 ```
 
-### 7. `acceptStatus()` only matters when `exceptions => true`
+### 8. `acceptStatus()` only matters when `exceptions => true`
 If exceptions are disabled (default), `acceptStatus()` does nothing visible — `isOk()` still only returns `true` for 2xx.
 
-### 8. `getHeaders()` resets after each send
-Unlike most persistent options, `getHeaders()` (i.e. `CURLOPT_HEADER`) **clears after send()**. Call it again on each request where you need response headers.
+---
 
-### 9. Raw upload vs multipart upload
-- `body(['file' => $curl->getUploadFile()])` → multipart/form-data, file is one field among others
-- `body($curl->getUploadFile())` → raw binary body, the file IS the entire request body
+## Orchestrator — Multi-Step Flows
+
+For scraping, automation, or any workflow that chains **multiple dependent HTTP requests** (where step N's response controls whether step N+1 runs), Scurl ships with an orchestrator in `SrvClick\Scurlv2\Orchestrator`.
+
+### When to reach for the Orchestrator (vs. writing procedural code)
+
+Prefer the Orchestrator when **any** of these apply:
+
+- Multiple requests must run in a specific order, and a failure should halt the rest.
+- You want declarative validation per step (status code, body substring, JSON field) instead of ad-hoc `if ($response->isOk() && ...)` pyramids.
+- You need **retry with delay** on specific steps without mutating global config.
+- You need an **error-recovery path** (e.g. "if this fails with 401, re-login and resume").
+- You need one step to use an **isolated Scurl instance** (fresh cookies/headers) but keep the main session intact for the rest of the flow.
+
+Keep using plain Scurl for single requests or flows where every step has bespoke error handling.
+
+### Core classes
+
+```
+SrvClick\Scurlv2\Orchestrator                  ← main class (fluent entry point)
+SrvClick\Scurlv2\Orchestrator\Step             ← fluent builder per step (proxies all Scurl methods via __call)
+SrvClick\Scurlv2\Orchestrator\Result           ← aggregate result after run()
+SrvClick\Scurlv2\Orchestrator\StepResult       ← per-step readonly result
+```
+
+### Minimal example
+
+```php
+use SrvClick\Scurlv2\Orchestrator;
+
+$orch = new Orchestrator();
+
+// Configure the shared Scurl (persists across every non-fresh step)
+$orch->getScurl()
+     ->config(['exceptions' => false])
+     ->cookie()
+     ->timeout(15)
+     ->useragent('MyScraper/1.0');
+
+$orch->step('login')
+     ->url('https://site.com/api/login')
+     ->post()
+     ->body(['user' => 'x', 'pass' => 'y'])
+     ->expectStatus(200)
+     ->expectJson('success', true)
+     ->retries(3, 1000)
+     ->onFail('cancel');
+
+$orch->step('fetch')
+     ->url('https://site.com/api/data')
+     ->get()
+     ->expectStatus([200, 204])
+     ->expectBodyContains('"status":"ok"');
+
+$result = $orch->run();
+
+if ($result->isSuccess()) {
+    $data = $result->response('fetch')->array();
+}
+```
+
+You can also inject a pre-built Scurl:
+
+```php
+$curl = new Scurl();
+$curl->config(['exceptions' => false])->timeout(20)->useragent('Bot/2.0');
+
+$orch = new Orchestrator($curl);
+// Equivalent:
+$orch = (new Orchestrator())->scurl($curl);
+```
+
+### Instance lifecycle (critical to understand)
+
+- The Orchestrator holds **one** `Scurl` instance (`$orch->getScurl()`) that all non-`fresh()` steps share. Cookies, headers, proxy, useragent, and other global config persist across the entire flow.
+- A step marked `->fresh()` gets a **brand-new `Scurl`** for that one step only. The main Scurl is not touched; the next non-fresh step resumes using the shared instance.
+- `Request::reset()` still runs after every `send()` inside a step, so per-request data (body, upload file, auto-added JSON content-type) is cleared between steps as usual.
+
+### Declaring a step
+
+`Step` **proxies all Scurl methods via `__call`** and defers their execution until runtime. Every Scurl fluent method is available on the step:
+
+`url`, `target`, `get`/`post`/`put`/`delete`/`patch`/`head`/`options_method`, `method`, `body`/`parameters`, `json`, `headers`, `timeout`, `useragent`, `upload`, `getHeaders`, `options`, `acceptStatus`, `proxy`, `cookie`/`cookieFile`, `addCookie`/`replaceCookie`/`deleteCookie`/`deleteCookieCompletely`, `config`.
+
+```php
+$orch->step('search')
+     ->url('https://api.example.com/search')
+     ->post()
+     ->headers(['X-Api-Key' => 'abc'])
+     ->body(['query' => 'laravel'])
+     ->timeout(10);
+```
+
+### Expectations (what a successful response looks like)
+
+Multiple expectations are combined with AND. If none are declared, the step requires a 2xx status by default.
+
+```php
+$orch->step('check')
+     ->expectStatus(200)                         // int or int[]
+     ->expectStatus([200, 204])
+
+     ->expectBodyContains('exito')               // case-sensitive substring
+     ->expectBodyContains(['"ok":true', 'token']) // all must be present
+
+     ->expectJson('success', true)                // dot-notation path
+     ->expectJson('data.user.id', 42)
+
+     // Free-form validator: return true/null to pass, false to fail,
+     // or a string to fail with a custom reason.
+     ->expect(function ($response) {
+         return (int) $response->getHeader('x-ratelimit-remaining') > 0
+             ? true
+             : 'Rate limit exhausted';
+     });
+```
+
+The first failing expectation wins and its reason is stored in `StepResult::$failureReason`.
+
+### Retries and failure handling
+
+```php
+$orch->step('payment')
+     ->url('https://api.example.com/charge')
+     ->post()
+     ->body($data)
+     ->expectStatus(200)
+     ->retries(3, 2000)   // up to 3 retries, 2000 ms between each (4 attempts total)
+     ->onFail('cancel');  // default
+```
+
+`onFail` values:
+
+| Value                     | Behavior when the step ultimately fails (after retries) |
+|---------------------------|---------------------------------------------------------|
+| `'cancel'` (default)      | Stop the flow. `Result::failedAt()` returns this step name. |
+| `'continue'`              | Move on to the next step anyway. |
+| `'<stepName>'`            | Jump to a specific declared step (re-login / rescue pattern). |
+| `callable`                | Receives `(StepResult $sr, Orchestrator $orch, Result $partial)` and must return one of the strings above. |
+
+Dynamic recovery example:
+
+```php
+$orch->step('fetchData')
+     ->url('https://api.example.com/data')
+     ->get()
+     ->expectStatus(200)
+     ->onFail(function ($stepResult, $orch, $result) {
+         if ($stepResult->response?->statuscode() === 401) {
+             return 'login';   // token expired → re-login, then the flow resumes from 'login'
+         }
+         return 'cancel';
+     });
+```
+
+### Custom step order with `next()`
+
+By default steps run in declaration order. `next($stepName)` overrides the successor on success:
+
+```php
+$orch->step('a')->url('...')->get()->next('c');  // 'a' passes → jump directly to 'c'
+$orch->step('b')->url('...')->get();             // skipped when 'a' succeeds
+$orch->step('c')->url('...')->get();
+```
+
+### Rescue/recovery steps — `offFlow()`
+
+Steps that exist **only to be targeted by `onFail()` or by an explicit `next()`** (re-login, token refresh, error-handling branches) must be marked `->offFlow()`. Otherwise, when the natural declaration order reaches them, they run anyway — and if they carry a `next()` pointing back into the main chain, the flow becomes an infinite loop:
+
+```
+login → fetch → reLogin → fetch → reLogin → fetch → ...
+```
+
+The orchestrator has a defensive guard (`stepCount × 50` transitions) that will eventually throw a `RuntimeException`, but that's a backstop — `offFlow()` is the correct way to express intent.
+
+```php
+$orch->step('login')->url('https://site.com/api/login')->post()->body([...])
+     ->expectStatus(200)->onFail('reLogin');
+
+$orch->step('fetch')->url('https://site.com/api/data')->get()
+     ->expectStatus(200);
+
+$orch->step('reLogin')                           // unreachable via declaration order
+     ->offFlow()
+     ->url('https://site.com/api/refresh')->post()->body(['refresh_token' => $token])
+     ->expectStatus(200)
+     ->next('fetch');                             // after recovery, resume fetch
+```
+
+Rules:
+- `offFlow` steps never run via natural progression (start of flow or step+1 after success).
+- `offFlow` steps **do** run when invoked via `onFail('<stepName>')` or `next('<stepName>')`.
+- After an `offFlow` step succeeds, its `next()` (if any) is honored; otherwise the next in-flow step is picked, still skipping further `offFlow` steps.
+- If **all** steps are `offFlow`, `run()` throws `RuntimeException` — there's no natural entry point.
+- You can still force an off-flow step as the starting point with `$orch->run('reLogin')`.
+
+### Isolated Scurl instance per step — `fresh()`
+
+```php
+$orch->step('user_data')          // uses shared Scurl (logged-in session)
+     ->url('https://site.com/api/me')->get();
+
+$orch->step('geoip')              // brand-new Scurl, no shared cookies/headers
+     ->fresh()
+     ->url('https://api.ipify.org?format=json')->get();
+
+$orch->step('user_orders')        // back to shared Scurl, session intact
+     ->url('https://site.com/api/orders')->get();
+```
+
+If the fresh step produces a value that must flow back to the main session (a token, a cookie), extract it in `afterSend()` and inject it in the next step via `request()` or `beforeSend()`.
+
+### Hooks — `beforeSend` and `afterSend`
+
+```php
+$orch->step('upload')
+     ->url('https://api.example.com/upload')
+     ->post()
+     // Signature: fn(Scurl $scurl, Result $partial): void
+     ->beforeSend(function ($scurl, $partial) {
+         $scurl->headers(['X-Trace-Id' => uniqid('trc_')]);
+     })
+     // Signature: fn(Response $response, Scurl $scurl, Result $partial): void
+     ->afterSend(function ($response, $scurl, $partial) {
+         // Runs after send() and BEFORE expectations are evaluated.
+     });
+```
+
+### Dynamic configuration — `request(callable)`
+
+When a step's configuration depends on a previous step's response (token, id, cookie), encode the logic with `request()` instead of fluent calls — fluent calls execute at declaration time with the arguments you passed, but `request()` callbacks run at step execution time with live access to `$scurl` and `$result`:
+
+```php
+$orch->step('fetch')
+     ->request(function ($scurl, $result) {
+         $token = $result->response('login')->getCookie('accessToken');
+         $scurl->headers(['Authorization' => 'Bearer ' . $token]);
+     })
+     ->url('https://api.example.com/data')
+     ->get()
+     ->expectStatus(200);
+```
+
+**Gotcha — multipart upload inside a step:** `$curl->getUploadFile()` returns the current CURLFile only after `upload()` has actually been applied. In a step, that happens at run time, so you can't reference it in a fluent `body()` call. Use `request()`:
+
+```php
+$orch->step('upload')
+     ->request(fn($scurl) => $scurl
+         ->upload('/path/to/file.pdf')
+         ->body([
+             'description' => 'Invoice',
+             'file'        => $scurl->getUploadFile(),
+         ])
+     )
+     ->url('https://api.example.com/upload')
+     ->post()
+     ->expectStatus(201);
+```
+
+### Reading the `Result`
+
+```php
+$result = $orch->run();
+
+$result->isSuccess();        // true if the flow ended without being cancelled
+$result->isCancelled();      // true if a step failed with onFail='cancel'
+$result->failedAt();         // name of the step that caused the cancellation, or null
+
+$result->response('login');  // Response of the step named 'login' (or null)
+$result->lastResponse();     // Response of the last executed step
+$result->lastStepResult();   // StepResult of the last executed step
+
+$result->get('login');       // StepResult for a given step name
+$result->steps();            // array<string, StepResult>
+$result->executionOrder();   // ['login', 'fetch', 'rescue', ...] actual execution order
+```
+
+Per-step `StepResult` (readonly, positional or named-arg construction):
+
+```php
+$sr = $result->get('login');
+$sr->name;                 // string — step name
+$sr->passed;               // bool — true if all expectations passed
+$sr->attempts;             // int — total attempts (1 if no retry happened)
+$sr->response;             // ?Response — the Response object, may be null on hard errors
+$sr->failureReason;        // ?string — e.g. "Status 404 not in [200]"
+$sr->exception;            // ?Throwable — captured during send()
+$sr->usedFreshInstance;    // bool — whether this step ran with ->fresh()
+```
+
+### `isSuccess()` semantics (important)
+
+`Result::isSuccess()` returns `true` if the flow finished without being cancelled. A step that failed but was rescued via `onFail('<otherStep>')` or `onFail('continue')` does **not** flip `isSuccess()` to false. If the caller cares about "did every single step pass," check per-step results:
+
+```php
+$allPassed = array_reduce(
+    $result->steps(),
+    fn($ok, $s) => $ok && $s->passed,
+    true
+);
+```
+
+### Global hooks
+
+For centralized logging/metrics without polluting every step:
+
+```php
+$orch->onStepSuccess(function ($stepResult, $orch, $result) {
+         Log::info("Step OK: {$stepResult->name} ({$stepResult->attempts} attempts)");
+     })
+     ->onStepFailure(function ($stepResult, $orch, $result) {
+         Log::warning("Step FAIL: {$stepResult->name} — {$stepResult->failureReason}");
+     });
+```
+
+### Common patterns
+
+#### Login + authenticated call + rescue on token expiry
+
+```php
+$orch = new Orchestrator();
+$orch->getScurl()
+     ->config(['exceptions' => false])
+     ->cookie()
+     ->timeout(20);
+
+$orch->step('login')
+     ->url('https://site.com/api/login')->post()
+     ->body(['email' => 'u@x.com', 'password' => 'secret'])
+     ->expectStatus(200)->expectJson('success', true)
+     ->retries(2, 1500)->onFail('cancel');
+
+$orch->step('orders')
+     ->url('https://site.com/api/orders')->get()
+     ->expectStatus([200, 204])
+     ->onFail(fn($sr) => $sr->response?->statuscode() === 401 ? 'login' : 'cancel');
+
+$result = $orch->run();
+```
+
+#### Sequential scraping with fresh side-call
+
+```php
+$orch->step('list')    // main Scurl
+     ->url('https://site.com/list')->get()->expectStatus(200);
+
+$orch->step('captcha') // isolated Scurl so cookies don't leak
+     ->fresh()
+     ->url('https://captcha.provider/solve')->post()->body([...])
+     ->expectStatus(200)->expectJson('status', 'ok');
+
+$orch->step('detail')  // main Scurl again, session intact
+     ->request(fn($scurl, $result) =>
+         $scurl->headers(['X-Captcha' => $result->response('captcha')->array()['token']])
+     )
+     ->url('https://site.com/detail')->get()->expectStatus(200);
+```
+
+### Gotchas specific to the Orchestrator
+
+0. **Rescue steps that don't use `offFlow()` cause infinite loops.** If a step carries `->next('<earlierStep>')` and is reached via the natural declaration order (not via `onFail`), the flow will bounce forever. Mark rescue/recovery steps with `->offFlow()`.
+1. **Fluent calls are deferred, arguments are not.** `->body($data)` stores a closure that calls `$scurl->body($data)` at run time, but `$data` is captured by value at declaration time. If `$data` must be computed from a previous response, use `request(callable)`.
+2. **`expectJson()` requires a valid JSON body.** If the response isn't JSON, the step fails with `"Expected JSON in the response but the body is not valid JSON"`. Use `expectBodyContains()` for non-JSON endpoints.
+3. **Retry counter is per step, not per flow.** `retries(3)` means 4 total attempts for that step; the count does not reset when jumping to other steps via `onFail`.
+4. **Default expectation is 2xx.** A step with no `expectStatus*()`/`expectJson*()`/`expectBodyContains*()` will still fail if the response is not 2xx.
+5. **Infinite-loop guard.** The run loop aborts with a `RuntimeException` after `50 × stepCount` transitions to catch misconfigured `onFail` cycles.
+6. **`StepResult` is read-only.** Properties are PHP `readonly` promoted — you cannot mutate them after `run()` returns.
+7. **`$sr->response` can be null** if the step threw before `send()` returned (e.g. invalid URL, unresolvable host with `exceptions=true` on Scurl's config).
 
 ---
 
@@ -772,8 +1098,25 @@ dd([
     'ok'      => $response->isOk(),
     'isJson'  => $response->isJson(),
     'body'    => $response->body(),
-    'json'    => $response->json(),
+    'array'   => $response->array(),
     'headers' => $response->headers(),
+]);
+
+// Orchestrator: inspect the full flow after run()
+$result = $orch->run();
+dd([
+    'success'   => $result->isSuccess(),
+    'cancelled' => $result->isCancelled(),
+    'failedAt'  => $result->failedAt(),
+    'order'     => $result->executionOrder(),
+    'steps'     => array_map(fn($s) => [
+        'name'    => $s->name,
+        'passed'  => $s->passed,
+        'status'  => $s->response?->statuscode(),
+        'attempts'=> $s->attempts,
+        'fresh'   => $s->usedFreshInstance,
+        'reason'  => $s->failureReason,
+    ], $result->steps()),
 ]);
 ```
 
@@ -789,15 +1132,24 @@ dd([
 | Custom headers | `$curl->headers(['X-Key' => 'val'])` |
 | Auth header | `$curl->headers(['Authorization' => 'Bearer '.$token])` |
 | With cookies | `$curl->cookie()->url($url)->get()->send()` |
-| Multipart upload | `$curl->upload($path)->body(['f' => $curl->getUploadFile()])->post()->send()` |
-| Raw binary upload | `$curl->upload($path)->body($curl->getUploadFile())->put()->send()` |
+| File upload | `$curl->upload($path)->body(['f' => $curl->getUploadFile()])->post()->send()` |
 | Proxy | `$curl->proxy('http://user:pass@host:port')` |
 | Throw on error | `$curl->config(['exceptions' => true])` |
 | Accept 4xx | `$curl->acceptStatus(400)` |
-| Capture response headers | `->getHeaders()->send()` |
 | Response body | `$response->body()` |
-| Response JSON | `$response->json()` |
+| Response as array | `$response->array()` (prefer over `json()`) |
 | Response status | `$response->statuscode()` |
 | Check success | `$response->isOk()` |
-| Response header | `$response->getHeader('content-type')` (needs `getHeaders()`) |
-| Response cookie | `$response->getCookie('name')` (needs `getHeaders()`) |
+| Response header | `$response->getHeader('content-type')` (needs CURLOPT_HEADER) |
+| Response cookie | `$response->getCookie('name')` (needs CURLOPT_HEADER) |
+| Multi-step flow | `$orch = new Orchestrator(); $orch->step('x')->url(...)->get()->expectStatus(200); $orch->run();` |
+| Expect status | `->expectStatus(200)` or `->expectStatus([200,204])` |
+| Expect JSON field | `->expectJson('data.id', 42)` (dot-notation) |
+| Expect body text | `->expectBodyContains('ok')` |
+| Retry on failure | `->retries(3, 1000)` (n retries, delayMs between) |
+| Stop on failure | `->onFail('cancel')` (default) |
+| Recover step | `->onFail('reLoginStep')` or `->onFail(fn($sr) => ...)` |
+| Rescue-only step | `->offFlow()` (skipped in natural order, reachable via onFail/next) |
+| Fresh scurl per step | `->fresh()` |
+| Dynamic config | `->request(fn($scurl, $result) => ...)` |
+| Read step response | `$result->response('stepName')->array()` |
