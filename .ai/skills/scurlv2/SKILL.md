@@ -1,11 +1,11 @@
 ---
 name: scurl-v2
-description: Modern PHP 8.0+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
+description: Modern PHP 8.3+ HTTP client built on cURL with fluent API, reusable instances, and Laravel integration patterns.
 ---
 
 ## What is Scurl?
 
-**Scurl** is a modern PHP 8.0+ HTTP client built on top of cURL, with a fluent (chainable) API. It wraps three classes:
+**Scurl** is a modern PHP 8.3+ HTTP client built on top of cURL, with a fluent (chainable) API. It wraps three classes:
 
 ```
 Scurl          ← Public fluent facade. All user-facing methods live here.
@@ -23,7 +23,7 @@ Scurl          ← Public fluent facade. All user-facing methods live here.
 composer require srvclick/scurlv2
 ```
 
-Requires PHP 8.0+ and the `ext-curl` extension enabled.
+Requires PHP 8.3+ and the `ext-curl` extension enabled.
 
 ---
 
