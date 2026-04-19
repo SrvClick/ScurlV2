@@ -3,7 +3,7 @@ namespace SrvClick\Scurlv2;
 
 class Response
 {
-    protected ?string $body = null;
+    protected string $body;
     protected int $statusCode = 0;
     protected bool $isJson = false;
 
@@ -40,7 +40,7 @@ class Response
         return $this->responseHeaders;
     }
 
-    public function getHeader(string $name, $default = null)
+    public function getHeader(string $name, $default = null): mixed
     {
         $name = strtolower($name);
         if (empty($this->responseHeaders)) {
@@ -49,7 +49,7 @@ class Response
         return $this->responseHeaders[$name] ?? $default;
     }
 
-    public function getCookie(string $cookieName, $default = null)
+    public function getCookie(string $cookieName, $default = null): mixed
     {
         if (
             !isset($this->responseHeaders['set-cookie']) ||
@@ -121,12 +121,111 @@ class Response
         return $this->isJson ? json_decode($this->body, true) : null;
     }
 
-    public function isOk()
+    public function isOk(): bool
     {
-
-
         return $this->statuscode() >= 200 && $this->statuscode() < 300;
     }
 
+    // =========================================================
+    // ACCESO A JSON CON DOT NOTATION
+    // =========================================================
 
+    /**
+     * Obtiene un valor del JSON del body usando dot-notation.
+     *
+     * Equivalente a:
+     *   $arr = $response->array();
+     *   $arr['data']['user']['id'] ?? $default;
+     *
+     * Soporta índices numéricos: 'data.roles.0' accede a $arr['data']['roles'][0].
+     * Si el body no es JSON válido o la ruta no existe, retorna $default.
+     *
+     *   $response->get('data.user.id');              // 42
+     *   $response->get('no.existe', 'fallback');     // 'fallback'
+     */
+    public function get(string $path, mixed $default = null): mixed
+    {
+        $arr = $this->array();
+        if ($arr === null) {
+            return $default;
+        }
+
+        $cur = $arr;
+        foreach (explode('.', $path) as $key) {
+            if (!is_array($cur) || !array_key_exists($key, $cur)) {
+                return $default;
+            }
+            $cur = $cur[$key];
+        }
+        return $cur;
+    }
+
+    /**
+     * Indica si una ruta dot-notation existe en el JSON del body.
+     *
+     * A diferencia de get(), distingue "clave ausente" de "clave presente con valor null":
+     *
+     *   // body: {"user": {"name": null}}
+     *   $response->has('user.name');     // true  (la clave existe)
+     *   $response->get('user.name');     // null  (valor es null)
+     *   $response->has('user.age');      // false (la clave no existe)
+     */
+    public function has(string $path): bool
+    {
+        $arr = $this->array();
+        if ($arr === null) {
+            return false;
+        }
+
+        $cur = $arr;
+        foreach (explode('.', $path) as $key) {
+            if (!is_array($cur) || !array_key_exists($key, $cur)) {
+                return false;
+            }
+            $cur = $cur[$key];
+        }
+        return true;
+    }
+
+    /**
+     * Verifica si el valor en la ruta dot-notation es ESTRICTAMENTE igual al esperado.
+     *
+     * Misma semántica que el expectJson() del Orchestrator:
+     * - Comparación con === (no hace casts, 1 !== "1").
+     * - Clave ausente se trata como null (expectJson('no.existe', null) → true).
+     *
+     *   $response->expectJson('success', true);
+     *   $response->expectJson('data.user.id', 42);
+     */
+    public function expectJson(string $path, mixed $expected): bool
+    {
+        return $this->get($path) === $expected;
+    }
+
+    /**
+     * Atajo invocable: permite usar $response() como función.
+     *
+     * - Con un argumento → alias de get().
+     * - Con dos argumentos → alias de expectJson() (comparación estricta).
+     *
+     *   $id    = $response('data.user.id');           // get()
+     *   $match = $response('data.user.id', 42);       // expectJson()
+     *
+     * Útil dentro de condicionales cortos:
+     *
+     *   if ($response->isOk() && $response('success', true)) { ... }
+     *
+     * Nota: se usa func_num_args() para distinguir entre "no pasó el segundo
+     * argumento" y "lo pasó con valor null" (ambos darían igual con un default
+     * normal). Esto permite validar explícitamente contra null:
+     *
+     *   $response('data.error', null);   // ¿data.error es exactamente null?
+     */
+    public function __invoke(string $path, mixed $expected = null): mixed
+    {
+        if (func_num_args() === 1) {
+            return $this->get($path);
+        }
+        return $this->expectJson($path, $expected);
+    }
 }

@@ -133,6 +133,39 @@ $curl->acceptStatus(400);    // Acepta 4xx como respuesta válida (no lanzará e
 
 ---
 
+### 🔒 Verificación SSL
+
+Por defecto Scurl **verifica el certificado SSL del servidor** en conexiones HTTPS (`CURLOPT_SSL_VERIFYPEER=true`, `CURLOPT_SSL_VERIFYHOST=2`). Esto protege contra ataques MITM y es el comportamiento recomendado.
+
+Si necesitas conectarte a un servidor con certificado autofirmado, expirado, o en un entorno de desarrollo local, puedes desactivar la verificación con `insecure()`:
+
+```php
+$curl->url('https://self-signed.dev/api')
+     ->insecure()        // ⚠️ Desactiva verificación SSL
+     ->get()
+     ->send();
+```
+
+**Características del flag `insecure()`:**
+
+- **Persiste durante toda la vida de la instancia** de Scurl — `reset()` no lo revierte.
+- Afecta a todas las peticiones posteriores hasta que lo desactives explícitamente.
+- Para re-activar la verificación en la misma instancia: `$curl->insecure(false)`.
+
+```php
+$curl = new Scurl();
+$curl->insecure();                              // SSL desactivado
+$curl->url('https://dev.local')->get()->send(); // sin verificar
+$curl->url('https://dev.local')->post()->send();// sin verificar (persiste)
+
+$curl->insecure(false);                         // SSL re-activado
+$curl->url('https://api.prod.com')->get()->send(); // verifica normalmente
+```
+
+> ⚠️ **Nunca uses `insecure()` en producción contra servidores reales.** Deja la conexión vulnerable a ataques de intermediario. Solo tiene sentido en entornos controlados donde confías en la red de manera explícita.
+
+---
+
 ### 📤 Headers, parámetros y JSON
 
 ```php
@@ -294,6 +327,70 @@ $response->getHeader('content-type'); // Header específico (case-insensitive)
 $response->getCookie('nombre');      // Cookie de la respuesta (requiere getHeaders())
 ```
 
+### 🎯 Acceso a JSON con dot notation
+
+Para los casos en que solo necesitas leer o validar un campo puntual del JSON del response, Scurl expone tres métodos (y un atajo invocable) que evitan decodificar a mano y navegar arrays anidados:
+
+```php
+// body: {"success": true, "data": {"user": {"id": 42, "name": "Joel"}}}
+
+// 1) get() — obtener un valor (con default opcional)
+$response->get('data.user.id');              // 42
+$response->get('data.user.name');            // 'Joel'
+$response->get('no.existe', 'fallback');     // 'fallback'
+$response->get('data.user');                 // ['id' => 42, 'name' => 'Joel']
+
+// 2) has() — verificar si una ruta existe (distingue "ausente" de "null")
+$response->has('data.user.id');              // true
+$response->has('data.user.fecha_muerte');    // false
+
+// 3) expectJson() — comparación estricta (===)
+$response->expectJson('success', true);            // true
+$response->expectJson('data.user.id', 42);         // true
+$response->expectJson('data.user.id', '42');       // false (int !== string)
+
+// 4) Atajo invocable: $response() como función
+$response('data.user.id');         // con 1 arg → get()
+$response('data.user.id', 42);     // con 2 args → expectJson()
+```
+
+#### Uso típico
+
+```php
+$response = $curl->url('https://api.example.com/me')->get()->send();
+
+if ($response->isOk() && $response('success', true)) {
+    $userId = $response->get('data.user.id');
+    $email  = $response->get('data.user.email', 'no-email@unknown');
+    // ...
+}
+```
+
+#### Reglas (idénticas al `expectJson()` del Orchestrator)
+
+- **La comparación de `expectJson()` es estricta (`===`).** `1 !== "1"`, `true !== 1`.
+- **Soporta índices numéricos:** `'data.roles.0'` accede a `$arr['data']['roles'][0]`.
+- **Clave ausente → `null`** en `get()` / `expectJson()`. Si necesitas distinguir "falta" de "es null", usa `has()`.
+- **Body no-JSON** → `get()` retorna el default, `has()` retorna `false`, `expectJson()` retorna `false` salvo que esperes `null` (por la regla anterior).
+- **Sin wildcards ni filtros.** Es acceso por path literal; para lógica compleja, lee con `get()` y compara a mano.
+
+#### El atajo invocable `$response(...)`
+
+Internamente usa `func_num_args()` para distinguir:
+
+```php
+$response('data.foo');         // siempre get(), retorna el valor
+$response('data.foo', null);   // expectJson('data.foo', null), retorna bool
+```
+
+Eso te permite, por ejemplo, validar explícitamente que un campo es `null`:
+
+```php
+if ($response('data.error', null)) {
+    // data.error existe y es exactamente null (o no existe, se trata como null)
+}
+```
+
 ---
 
 ## 🧠 Clases principales
@@ -324,6 +421,33 @@ try {
 // Acepta 4xx como válido (no lanza excepción aunque exceptions=true)
 $curl->acceptStatus(400);
 ```
+
+### Tipos de excepción que puede lanzar `send()`
+
+Scurl **no envuelve** las excepciones de la capa interna: se propagan con su clase, stack trace y cadena de `$previous` intactos. Esto permite catches específicos según el tipo de error:
+
+```php
+try {
+    $response = $curl->upload('/ruta/archivo.pdf')
+                     ->url('https://api.example.com/upload')
+                     ->post()
+                     ->send();
+} catch (InvalidArgumentException $e) {
+    // Archivo de upload no existe, proxy malformado,
+    // status group inválido en acceptStatus(), etc.
+    echo "Error de configuración: " . $e->getMessage();
+} catch (Exception $e) {
+    // HTTP error (solo si config(['exceptions' => true]) y el status no está aceptado)
+    echo "Error de red/HTTP: " . $e->getMessage();
+}
+```
+
+| Clase | Cuándo se lanza |
+|---|---|
+| `InvalidArgumentException` | Archivo de upload inexistente (`upload()` o body con CURLFile), proxy string sin host/port, grupo de status inválido en `acceptStatus()`. |
+| `\Exception` | HTTP status no aceptado cuando `config(['exceptions' => true])`. El mensaje incluye el status code y el body de la respuesta. |
+
+> 💡 El trace completo se conserva: `$e->getTrace()` apunta al lugar real donde se lanzó (dentro de `Request::send()` o helpers), no al `Scurl::send()` intermedio.
 
 ---
 

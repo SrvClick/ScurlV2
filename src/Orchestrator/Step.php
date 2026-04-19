@@ -337,14 +337,13 @@ class Step
             }
         }
 
-        // 3) Campos JSON
+        // 3) Campos JSON — delegamos la navegación a Response::get()
         if (!empty($this->expectedJsonPaths)) {
-            $arr = $response->array();
-            if ($arr === null) {
+            if ($response->array() === null) {
                 return "Se esperaba JSON en la respuesta pero el body no es JSON válido";
             }
             foreach ($this->expectedJsonPaths as [$path, $expected]) {
-                $actual = $this->getByDotPath($arr, $path);
+                $actual = $response->get($path);
                 if ($actual !== $expected) {
                     $a = $this->dump($actual);
                     $e = $this->dump($expected);
@@ -369,19 +368,6 @@ class Step
         }
 
         return null;
-    }
-
-    protected function getByDotPath(array $arr, string $path): mixed
-    {
-        $keys = explode('.', $path);
-        $cur = $arr;
-        foreach ($keys as $key) {
-            if (!is_array($cur) || !array_key_exists($key, $cur)) {
-                return null;
-            }
-            $cur = $cur[$key];
-        }
-        return $cur;
     }
 
     protected function dump(mixed $v): string

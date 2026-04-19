@@ -102,8 +102,7 @@ class Scurl
     }
     public function cookieFile(?string $file = null): self
     {
-
-        $this->request->cookieFile($file);
+        $this->request->enableCookies($file);
         return $this;
     }
     public function cookie() : Scurl
@@ -151,6 +150,27 @@ class Scurl
     public function timeout(int $seconds): Scurl
     {
         $this->request->setTimeout($seconds);
+        return $this;
+    }
+
+    /**
+     * Deshabilita la verificación del certificado SSL del servidor.
+     *
+     * ⚠️ Inseguro: expone la conexión a MITM. Úsalo solo en entornos controlados
+     * (desarrollo local, sitios con certificados autofirmados conocidos).
+     *
+     * El flag persiste en esta instancia de Scurl: reset() no lo revierte, por
+     * lo que afecta a todas las requests posteriores hasta que lo desactives
+     * explícitamente con ->insecure(false).
+     *
+     * Ejemplo:
+     *     $curl->url('https://self-signed.dev/api')->insecure()->get()->send();
+     *
+     * @param bool $enable true para deshabilitar la verificación (default), false para re-activarla.
+     */
+    public function insecure(bool $enable = true): Scurl
+    {
+        $this->request->setInsecure($enable);
         return $this;
     }
     public function json() : Scurl
@@ -210,14 +230,24 @@ class Scurl
 
 
     /**
+     * Ejecuta la petición HTTP y retorna el Response.
+     *
+     * Las excepciones de Request::send() se propagan tal cual, preservando:
+     *   - La clase original (InvalidArgumentException, \Exception, etc.)
+     *   - El stack trace original (no se sobreescribe con el de este frame)
+     *   - La cadena de $previous si la hubiera
+     *
+     * Casos típicos que pueden lanzar:
+     *   - InvalidArgumentException: archivo de upload inexistente, proxy
+     *     malformado, status group inválido en acceptStatus().
+     *   - \Exception: HTTP error cuando config(['exceptions' => true]) y el
+     *     status no está aceptado (ver acceptStatus()).
+     *
+     * @throws InvalidArgumentException
      * @throws Exception
      */
     public function send(): Response
     {
-        try {
-            return $this->request->send();
-        } catch (Exception $e) {
-            throw new Exception($e->getMessage(), $e->getCode());
-        }
+        return $this->request->send();
     }
 }

@@ -290,6 +290,21 @@ $curl->acceptStatus(500);  // Accept 5xx as valid
 // Valid groups: 100, 200, 300, 400, 500
 ```
 
+**Exception types preserved**: `Scurl::send()` does NOT wrap inner exceptions. Original class, stack trace, and `$previous` chain bubble up intact.
+
+```php
+try {
+    $curl->upload('/missing.pdf')->post()->send();
+} catch (InvalidArgumentException $e) {
+    // Caught here — file-not-found bubbles as its original class
+}
+```
+
+| Exception class | Thrown when |
+|---|---|
+| `InvalidArgumentException` | upload file doesn't exist, malformed proxy string, invalid status group in `acceptStatus()` |
+| `\Exception` | HTTP status not accepted AND `config(['exceptions' => true])` |
+
 ---
 
 ### Raw cURL Options
@@ -302,7 +317,6 @@ $curl->options([
     CURLOPT_FOLLOWLOCATION => true,
     CURLOPT_MAXREDIRS      => 5,
     CURLOPT_ENCODING       => '',        // Accept gzip/deflate
-    CURLOPT_SSL_VERIFYPEER => true,      // Enable SSL verification (disabled by default)
     CURLOPT_CONNECTTIMEOUT => 10,
     CURLOPT_HEADER         => true,      // Enable response header capture
     CURLOPT_COOKIEJAR      => '/tmp/c.txt',
@@ -320,9 +334,25 @@ $curl->getOptions();
 | `CURLOPT_RETURNTRANSFER` | `true` |
 | `CURLOPT_FOLLOWLOCATION` | `true` |
 | `CURLOPT_TIMEOUT` | `30` |
-| `CURLOPT_SSL_VERIFYPEER` | `false` |
-| `CURLOPT_SSL_VERIFYHOST` | `false` |
+| `CURLOPT_SSL_VERIFYPEER` | `true` |
+| `CURLOPT_SSL_VERIFYHOST` | `2` |
 | `CURLOPT_HTTPHEADER` | `['user-agent: SrvClick Scurl/2.0']` |
+
+### SSL Verification — `insecure()`
+
+SSL certificate verification is **enabled by default** (`CURLOPT_SSL_VERIFYPEER=true`, `CURLOPT_SSL_VERIFYHOST=2`). For self-signed certificates or local development, use the explicit opt-out:
+
+```php
+$curl->url('https://self-signed.dev/api')
+     ->insecure()        // Disables SSL verification for this instance
+     ->get()
+     ->send();
+```
+
+**Rules:**
+- `insecure()` **persists across `reset()`** — once disabled, all subsequent requests on the same Scurl instance skip verification.
+- Re-enable verification in the same instance: `$curl->insecure(false)`.
+- Never use in production against real servers — leaves connections open to MITM.
 
 ---
 
@@ -441,6 +471,55 @@ $response->getCookie('session_id', '');      // With fallback default
 $response->getCookieFileName();              // string path, or '' if none
 ```
 
+### Dot-notation JSON Access
+
+Response exposes dot-notation helpers to read/validate JSON fields without manually decoding:
+
+```php
+// Given body: {"success": true, "data": {"user": {"id": 42, "name": "Joel"}}}
+
+// 1) Read a value (with optional default)
+$response->get('data.user.id');               // 42
+$response->get('data.user.name');             // 'Joel'
+$response->get('no.existe', 'fallback');      // 'fallback'
+$response->get('data.roles.0');               // numeric indices work too
+
+// 2) Check if a path exists (distinguishes "missing" from "null value")
+$response->has('data.user.id');               // true
+$response->has('data.user.missing');          // false
+
+// 3) Strict equality check (===)
+$response->expectJson('success', true);       // true
+$response->expectJson('data.user.id', 42);    // true
+$response->expectJson('data.user.id', '42');  // false (int !== string)
+
+// 4) Invokable shortcut
+$response('data.user.id');                    // 1 arg  → get()
+$response('data.user.id', 42);                // 2 args → expectJson()
+```
+
+**Rules (same semantics as Orchestrator's `Step::expectJson`):**
+- Strict `===` comparison (no casts).
+- Missing keys resolve to `null` in `get()` / `expectJson()`. Use `has()` to distinguish.
+- Numeric indices are supported: `'data.roles.0'` → `$arr['data']['roles'][0]`.
+- Non-JSON body: `get()` returns default, `has()` returns `false`, `expectJson()` returns `false` (unless you compare against `null`).
+- No wildcards or filters — path must be literal.
+
+**Idiomatic usage in conditionals:**
+
+```php
+if ($response->isOk() && $response('success', true)) {
+    $userId = $response->get('data.user.id');
+    // ...
+}
+```
+
+**The invokable uses `func_num_args()`** to distinguish "no second arg" (→ `get()`) from "second arg is null" (→ `expectJson(..., null)`), so you can still validate explicitly for null:
+
+```php
+$response('data.error', null);   // true if data.error is exactly null (or missing)
+```
+
 ---
 
 ## reset() — What Clears, What Persists
@@ -452,6 +531,7 @@ Called automatically after every `send()`. Understanding this is critical.
 | `body()` / `parameters()` | ✅ | |
 | `upload()` file | ✅ | |
 | `Content-Type: application/json` header | ✅ | |
+| `CURLOPT_HEADER` / `CURLOPT_HEADERFUNCTION` (`getHeaders()`) | ✅ | |
 | `headers()` (custom headers) | | ✅ |
 | `useragent()` | | ✅ |
 | `cookie()` / `cookieFile()` | | ✅ |
@@ -460,6 +540,7 @@ Called automatically after every `send()`. Understanding this is critical.
 | `config()` | | ✅ |
 | `options()` (cURL options) | | ✅ |
 | `acceptStatus()` groups | | ✅ |
+| `insecure()` (SSL verification) | | ✅ |
 
 ---
 
@@ -680,14 +761,12 @@ $curl->url($url)->get()->send();
 - `options([...])` → sets raw cURL options
   These are two completely different methods.
 
-### 6. SSL verification is disabled by default
-`CURLOPT_SSL_VERIFYPEER` and `CURLOPT_SSL_VERIFYHOST` are `false` by default. Enable for production:
+### 6. SSL verification is enabled by default
+`CURLOPT_SSL_VERIFYPEER=true` and `CURLOPT_SSL_VERIFYHOST=2` are the defaults. To disable (e.g. for self-signed certs in development), use the explicit fluent method:
 ```php
-$curl->options([
-    CURLOPT_SSL_VERIFYPEER => true,
-    CURLOPT_SSL_VERIFYHOST => 2,
-]);
+$curl->url('https://self-signed.dev')->insecure()->get()->send();
 ```
+The `insecure()` flag persists across requests on the same instance (`reset()` does not revert it). Pass `false` to re-enable: `$curl->insecure(false)`.
 
 ### 7. `config()` merges, not replaces
 ```php
